@@ -18,7 +18,7 @@ get_slow_movement_input_held :: proc() -> bool {
 	return is_key_held(.LEFT_SHIFT)
 }
 
-get_mouse_pos_world :: proc(state: ^GameState) -> Vec2 {
+get_mouse_pos_world :: proc(state: ^Game_State) -> Vec2 {
 	pos := get_mouse_pos()
 	return screen_to_world(state.view, pos)
 }

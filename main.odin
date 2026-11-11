@@ -1,6 +1,6 @@
 package main
 
-state: GameState
+state: Game_State
 
 main :: proc() {
 	init_window("Tower defender")

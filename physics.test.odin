@@ -4,9 +4,6 @@ import "core:testing"
 
 // odin test . -define:ODIN_TEST_NAMES=game.sparse_grid_ray_query
 
-h :: proc(idx: u16) -> EntityHandle {
-	return {idx = idx}
-}
 
 @(test)
 test_line_intersects_rect :: proc(t: ^testing.T) {
