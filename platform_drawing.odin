@@ -42,16 +42,21 @@ draw_rect :: proc(rect: Rect, color: Color) {
 }
 
 draw_bg :: proc(color: Color) {
-	draw_rect({{0, 0}, {width(), height()}}, COLOR_WHITE)
+	draw_rect({{0, 0}, {width(), height()}}, color)
 }
 
 draw_rect_outline :: proc(rect: Rect, thickness: f32, color: Color) {
-	x := rect.pos.x - thickness
-	y := rect.pos.y - thickness
-	w := rect.size.x + 2 * thickness
-	h := rect.size.y + 2 * thickness
+	thickness := math.floor(thickness)
+	x := math.floor(rect.pos.x - thickness)
+	y := math.floor(rect.pos.y - thickness)
+	w := math.floor(rect.size.x + 2 * thickness)
+	h := math.floor(rect.size.y + 2 * thickness)
 	draw_rect({{x, y}, {w, thickness}}, color)
 	draw_rect({{x, y + h - thickness}, {w, thickness}}, color)
 	draw_rect({{x, y + thickness}, {thickness, h - 2 * thickness}}, color)
 	draw_rect({{x + w - thickness, y + thickness}, {thickness, h - 2 * thickness}}, color)
+}
+
+draw_line :: proc(start, end: Vec2, thickness: f32, color: Color) {
+	rl.DrawLineEx(start, end, thickness, color)
 }

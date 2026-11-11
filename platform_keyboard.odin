@@ -3,7 +3,7 @@ package main
 import rl "vendor:raylib"
 
 KeyboardKey :: rl.KeyboardKey
-is_key_down :: rl.IsKeyDown
+is_key_held :: rl.IsKeyDown
 is_key_pressed :: rl.IsKeyPressed
 is_key_repeated :: rl.IsKeyPressedRepeat
 
@@ -17,5 +17,5 @@ get_mouse_pos :: proc() -> Vec2 {
 
 MouseButton :: rl.MouseButton
 is_mouse_pressed :: rl.IsMouseButtonPressed
-is_mouse_down :: rl.IsMouseButtonDown
+is_mouse_held :: rl.IsMouseButtonDown
 get_mouse_scroll :: rl.GetMouseWheelMove

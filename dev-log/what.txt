@@ -1,0 +1,4 @@
+This dev log will record what I'm thinking about at a particular time.
+It should document any problems I've encountered, and how I've gone about solving or avoiding it.
+It may or may not be useful later.
+Only things that can't be documented in the code should go here.

@@ -13,23 +13,21 @@ log :: proc(args: ..any, loc := #caller_location) {
 	}
 }
 
-COLOR_WHITE :: rl.WHITE
-COLOR_BLACK :: rl.BLACK
-COLOR_GREY :: Color{125, 125, 125, 255}
-COLOR_RED :: rl.RED
-COLOR_GREEN :: rl.GREEN
-COLOR_BLUE :: rl.BLUE
-
 Color :: rl.Color
 Vec2 :: [2]f32
+Vec2i :: [2]i32
 Rect :: struct {
 	pos:  Vec2,
 	size: Vec2,
 }
-CursorType :: rl.MouseCursor
+Line :: struct {
+	start: Vec2,
+	end: Vec2,
+}
 
 last_monitor: c.int
-last_cursor: CursorType
+
+wanted_cursor, last_cursor : CursorType
 
 init_window :: proc(name: cstring) {
 	rl.SetConfigFlags({.VSYNC_HINT})
@@ -58,8 +56,29 @@ process_frame :: proc() -> bool {
 
 	free_all(context.temp_allocator)
 
-	rl.SetMouseCursor(rl.MouseCursor(last_cursor))
-	last_cursor = CursorType.DEFAULT
+	if wanted_cursor != last_cursor {
+		defer last_cursor = wanted_cursor
+
+		log("Updated mouse cursor to", wanted_cursor)
+
+		if last_cursor == .None {
+			rl.ShowCursor()
+		} else if wanted_cursor == .None {
+			rl.HideCursor()
+		}
+
+		switch wanted_cursor {
+			case .Default:      rl.SetMouseCursor(.DEFAULT)
+			case .Text:         rl.SetMouseCursor(.IBEAM)
+			case .PointingHand: rl.SetMouseCursor(.POINTING_HAND)
+			case .Crosshairs:   rl.SetMouseCursor(.CROSSHAIR)
+			case .None:
+				// Already handled
+		}
+	}
+
+	// The cursor is immediate mode.
+	set_mouse_cursor(.Default)
 
 	rl.BeginDrawing()
 
@@ -81,11 +100,29 @@ height :: proc() -> f32 {
 	return f32(rl.GetScreenHeight())
 }
 
-set_mouse_cursor :: proc(type: rl.MouseCursor) {
-	rl.SetMouseCursor(type)
+CursorType :: enum {
+	Default,
+	Text,
+	PointingHand,
+	Crosshairs,
+	None,
+}
+
+set_mouse_cursor :: proc(type: CursorType) {
+	wanted_cursor = type
 }
 
 get_delta_time :: proc() -> f32 {
 	return rl.GetFrameTime()
 }
 
+get_time :: proc() -> f64 {
+	return rl.GetTime()
+}
+
+update_timer :: proc(t: ^f64) -> f64 {
+	t1 := get_time()
+	result := t1 - t^
+	t^ = t1
+	return result
+}
