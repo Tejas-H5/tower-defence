@@ -126,3 +126,12 @@ update_timer :: proc(t: ^f64) -> f64 {
 	t^ = t1
 	return result
 }
+
+IS_DEVELOPMENT_BUILD :: true
+
+// These asserts are safe to turn off in prod, I am probably being paranoid putting them in
+dev_assert :: proc(condition: bool, message := #caller_expression(condition), loc := #caller_location) {
+	if IS_DEVELOPMENT_BUILD {
+		assert(condition, message, loc)
+	}
+}
