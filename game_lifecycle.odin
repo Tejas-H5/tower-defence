@@ -17,37 +17,43 @@ advance_timer :: proc(val: ^f32, dt: f32) {
 }
 
 add_tower :: proc(state: ^Game_State, position: Vec2) {
-	pool_add(&state.towers, {
-		position = position,
+	t := pool_add(&state.towers, {
 		color = COLOR_PLAYER,
 		health = 100,
 		size = 20,
 		shoot_cooldown = 0.2, shoot_cooldown_timer = 1,
 	})
+	set_entity_position(state, &state.towers, t, position)
 }
 
 add_bullet :: proc(state: ^Game_State, position: Vec2, velocity: Vec2) {
-	pool_add(&state.bullets, {
-		position = position,
+	b := pool_add(&state.bullets, {
 		color    = COLOR_PLAYER,
 		size     = 5,
 		velocity = velocity,
 	})
+	set_entity_position(state, &state.bullets, b, position)
 }
 
 is_dead :: proc(e: Entity) -> bool {
 	return e.health <= 0
 }
 
-kill_entity :: proc(pool: ^Item_Pool(Entity), i: int) {
+kill_entity :: proc(g: ^Game_State, pool: ^Item_Pool(Entity), i: int) {
 	pool.items[i].health = -1
+	spatial_grid_remove(&g.spatial_grid, &pool.items[i].spatial_grid_handle)
+}
+
+set_entity_position :: proc(g: ^Game_State, pool: ^Item_Pool(Entity), i: int,  pos: Vec2) {
+	pool.items[i]._position = pos
+	spatial_grid_add_or_update(&g.spatial_grid, &pool.items[i].spatial_grid_handle, pos, i)
 }
 
 closest_entity_SLOWWW :: proc(pool: ^Item_Pool(Entity), pos: Vec2, max_range: f32) -> (int, bool) {
 	target : int = -1
 	min_dist : f32 = max_range
 	for i in 0..<pool.count {
-		dist := linalg.length(pool.items[i].position - pos)
+		dist := linalg.length(pool.items[i]._position - pos)
 		if dist < min_dist {
 			min_dist = dist
 			target = i
@@ -57,7 +63,7 @@ closest_entity_SLOWWW :: proc(pool: ^Item_Pool(Entity), pos: Vec2, max_range: f3
 }
 
 get_rect :: proc(e: ^Item_Pool(Entity), i: int) -> Rect {
-	pos := e.items[i].position
+	pos := e.items[i]._position
 	size := e.items[i].size
 	rect := Rect{ pos - size / 2, size }
 	return rect

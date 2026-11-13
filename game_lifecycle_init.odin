@@ -4,6 +4,7 @@ import "core:math"
 import "core:math/linalg"
 import "core:math/rand"
 import "core:container/handle_map"
+import "core:mem"
 
 CAMERA_MOVE_SPEED :: 2.5
 CAMERA_MOVE_SPEED_SLOW :: 0.5
@@ -18,16 +19,29 @@ COLOR_HUD :: Color{0, 0, 255, 255}
 COLOR_MISSING :: Color{255, 255, 0, 255}
 COLOR_WORLD_BG :: Color{255, 255, 255, 255}
 
+PLAYER_MAX :: 1
+BASES_MAX :: 1
+ENEMIES_MAX :: 50_000
+TOWERS_MAX :: 1000
+BULLETS_MAX :: 1_000_000
+
+MAX_TOTAL ::
+	PLAYER_MAX +
+	BASES_MAX +
+	ENEMIES_MAX +
+	TOWERS_MAX +
+	BULLETS_MAX
 
 Game_State :: struct {
 	view: View_Bounds,
 
-	player_memory:  Item_Pool_Memory(Entity, 1),
+	player_memory:  Item_Pool_Memory(Entity, PLAYER_MAX),
 	bases_memory:   Item_Pool_Memory(Entity, 1),
 	enemies_memory: Item_Pool_Memory(Entity, 50_000),
 	towers_memory:  Item_Pool_Memory(Entity, 1000),
 	bullets_memory: Item_Pool_Memory(Entity, 1_000_000),
 
+	spatial_grid: Spatial_Grid(2 * MAX_TOTAL),
 	
 	player:  Item_Pool(Entity), // There will only ever be one player but I do this for #soa code reuseability
 	bases:   Item_Pool(Entity),
@@ -50,11 +64,13 @@ Base :: struct {
 
 Entity :: struct {
 	added_before_this_frame: bool,
-	position, position_prev: Vec2,
+	_position, position_prev: Vec2,
 	velocity:   Vec2,
 	color:      Color,
 	size:       f32,
 	health:     f32,
+
+	spatial_grid_handle: Spatial_Grid_Handle,
 
 	move_speed: f32,
 
@@ -70,9 +86,14 @@ Entity :: struct {
 
 
 init :: proc(state: ^Game_State) {
+	megabytes := size_of(Game_State) / mem.Megabyte
+	log("\n================ Memory usage: ", megabytes, "mb ================ ")
+
 	state.view = {
 		size = 1000,
 	}
+
+	state.spatial_grid.grid_size = 50
 
 	state.player  = memory_to_pool(&state.player_memory)
 	state.bases   = memory_to_pool(&state.bases_memory)
@@ -107,11 +128,10 @@ init :: proc(state: ^Game_State) {
 		pos := 1000 * Vec2{math.cos(angle), math.sin(angle)}
 		e := pool_add(&state.enemies, {
 			size          = 10,
-			position      = pos,
 			health        = 100,
 			move_speed    = 30 * rand.float32_range(1, 2),
 			color         = {255, 0, 0, 255},
 		})
+		set_entity_position(state, &state.enemies, e, pos)
 	}
-
 }

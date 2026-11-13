@@ -28,6 +28,7 @@ test_spatial_grid_insert_one :: proc(t: ^testing.T) {
 	entity := Test_Entity{pos={0, 0}}
 
 	spatial_grid_add_or_update(&grid, &entity.handle, entity.pos, 0)
+
 	expect_indices_at_pos(t, &grid, {0, 0}, []int{ 0 })
 	testing.expect_value(t, grid.count, 1);
 }
@@ -41,6 +42,7 @@ test_spatial_grid_insert_two_same_spot :: proc(t: ^testing.T) {
 	entity2 := Test_Entity{pos={0, 0}}
 
 	spatial_grid_add_or_update(&grid, &entity.handle, entity.pos, 0)
+
 	spatial_grid_add_or_update(&grid, &entity2.handle, entity2.pos, 1)
 
 	expect_indices_at_pos(t, &grid, {0, 0}, []int{ 0, 1 })
@@ -56,6 +58,7 @@ test_spatial_grid_insert_two_different_spots :: proc(t: ^testing.T) {
 	entity2 := Test_Entity{pos={10, 0}}
 
 	spatial_grid_add_or_update(&grid, &entity.handle, entity.pos, 0)
+
 	spatial_grid_add_or_update(&grid, &entity2.handle, entity2.pos, 1)
 
 	expect_indices_at_pos(t, &grid, {0, 0}, []int{ 0 })
@@ -73,6 +76,7 @@ test_spatial_grid_update_same_spot :: proc(t: ^testing.T) {
 
 	entity := Test_Entity{pos={0, 0}}
 	spatial_grid_add_or_update(&grid, &entity.handle, entity.pos, 0)
+
 	spatial_grid_add_or_update(&grid, &entity.handle, entity.pos, 0)
 
 	expect_indices_at_pos(t, &grid, {0, 0}, []int{ 0 })
@@ -117,18 +121,21 @@ test_spatial_grid_update_new_spot_with_other_items :: proc(t: ^testing.T) {
 test_spatial_grid_swap_positions:: proc(t: ^testing.T) {
 	grid := Spatial_Grid(5){ grid_size = f32(10) }
 
-	entity := Test_Entity{pos={0, 0}}
-	entity2 := Test_Entity{pos={10, 0}}
+	entity0 := Test_Entity{pos={0, 0}}
+	entity1 := Test_Entity{pos={10, 0}}
 
-	spatial_grid_add_or_update(&grid, &entity.handle, entity.pos, 0)
-	spatial_grid_add_or_update(&grid, &entity2.handle, entity2.pos, 1)
-
-	entity.pos = {10, 0}
-	entity2.pos = {0, 0}
-	spatial_grid_add_or_update(&grid, &entity.handle, entity.pos, 0)
-	spatial_grid_add_or_update(&grid, &entity2.handle, entity2.pos, 1)
+	spatial_grid_add_or_update(&grid, &entity0.handle, entity0.pos, 0)
+	spatial_grid_add_or_update(&grid, &entity1.handle, entity1.pos, 1)
 
 	expect_indices_at_pos(t, &grid, {0, 0}, []int{0})
 	expect_indices_at_pos(t, &grid, {10, 0}, []int{1})
+
+	entity0.pos = {10, 0}
+	entity1.pos = {0, 0}
+	spatial_grid_add_or_update(&grid, &entity0.handle, entity0.pos, 0)
+	spatial_grid_add_or_update(&grid, &entity1.handle, entity1.pos, 1)
+
+	expect_indices_at_pos(t, &grid, {0, 0}, []int{1})
+	expect_indices_at_pos(t, &grid, {10, 0}, []int{0})
 	testing.expect_value(t, grid.count, 2);
 }

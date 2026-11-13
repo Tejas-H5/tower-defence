@@ -52,8 +52,9 @@ update_game :: proc(state: ^Game_State, dt: f32) {
 				state.view.size = clamp(state.view.size, 100, 10000)
 			}
 
-			state.player.items[0].position = state.view.pos
-			state.player.items[0].position_prev = state.player.items[0].position
+			set_entity_position(state, &state.player, 0, state.view.pos)
+			// intentional - we want a teleport and not a move
+			state.player.items[0].position_prev = state.player.items[0]._position
 		}
 	}
 	state.perf.input += update_timer(&t)
@@ -66,20 +67,20 @@ update_game :: proc(state: ^Game_State, dt: f32) {
 			for i in 0 ..< pool.count {
 				advance_timer(&pool.items.lifetime_timer[i], dt)
 				advance_timer(&pool.items.shoot_cooldown_timer[i], dt)
-				pool.items.position_prev[i] = pool.items.position[i]
-				pool.items.position[i] += dt * pool.items.velocity[i]
+				pool.items.position_prev[i] = pool.items._position[i]
+				set_entity_position(state, pool, i, pool.items[i]._position + dt * pool.items.velocity[i])
 
 				if is_bullets_pool {
 					// Bullets get to damage enemies.
 					// Oh shit maybe this is the slow bit ...
 					// but this is far easier to speed up with a spatial hash than the 'closest enemy' thing the towers do.
-					ray := Line{pool.items[i].position_prev, pool.items[i].position}
+					ray := Line{pool.items[i].position_prev, pool.items[i]._position}
 
 					for i in 0 ..< state.enemies.count {
 						other_rect := get_rect(&state.enemies, i)
 						res := line_intersects_rect(ray, other_rect)
 						if res.num_hits > 0 {
-							pool.items[i].position = res.hits[0].pos
+							set_entity_position(state, pool, i, res.hits[0].pos)
 						}
 					}
 				}
@@ -105,34 +106,34 @@ update_game :: proc(state: ^Game_State, dt: f32) {
 
 						MAX_RANGE :: 10_000
 						// TODO: optimize this query somehow.
-						pos := pool.items[i].position
+						pos := pool.items[i]._position
 						target, ok := closest_entity_SLOWWW(&state.enemies, pos, MAX_RANGE)
 						if ok {
 							BULLET_SPEED :: 10_000
 							velocity :=
 								BULLET_SPEED *
-								linalg.normalize0(state.enemies.items[target].position - pos)
+								linalg.normalize0(state.enemies.items[target]._position - pos)
 							h := pool_add(
 								&state.bullets,
 								{
 									health = 100,
 									lifetime_timer = 5,
-									position = pos,
 									velocity = velocity,
 									size = 5,
 									color = COLOR_PLAYER,
 								},
 							)
+							set_entity_position(state, &state.bullets, h, pos)
 						}
 					}
 				} else if is_enemy_pool {
 					pool.items[i].velocity =
 						pool.items[i].move_speed *
-						linalg.normalize0(state.bases.items[0].position - pool.items[i].position)
+						linalg.normalize0(state.bases.items[0]._position - pool.items[i]._position)
 
 					if rect_intersects_rect(get_rect(&state.bases, 0), get_rect(pool, i)) {
 						state.bases.items[0].health -= 1
-						kill_entity(pool, i);
+						kill_entity(state, pool, i);
 					}
 				} else if is_bullets_pool {
 					rect := get_rect(pool, i)
@@ -152,7 +153,7 @@ update_game :: proc(state: ^Game_State, dt: f32) {
 					}
 
 					if bullet_hit {
-						kill_entity(pool, i)
+						kill_entity(state, pool, i)
 					}
 				}
 			}

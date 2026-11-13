@@ -1,8 +1,17 @@
 package main
 
+import "core:testing"
+
 state: Game_State
 
+TESTING :: false
+
 main :: proc() {
+	if TESTING {
+		run_test()
+		return
+	}
+
 	init_window("Tower defender")
 
 	init(&state)
@@ -36,3 +45,7 @@ main :: proc() {
 	close_window()
 }
 
+run_test :: proc() {
+	t := new(testing.T)
+	test_spatial_grid_swap_positions(t)
+}

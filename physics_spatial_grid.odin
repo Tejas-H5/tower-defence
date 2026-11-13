@@ -13,8 +13,7 @@ import "core:math"
 Spatial_Grid :: struct($N: uint) {
 	items:     [N]Spatial_Grid_Item,
 	grid_size: f32,
-	count:     i32,
-	gen:       i32,
+	count:     int,
 }
 
 // This is a pretty large structure. Maybe we want to downsize it later at some point.
@@ -71,13 +70,16 @@ spatial_grid_add_or_update :: proc(
 		dev_assert(handle.slot == nil)
 
 		// Probably our hashmap should be a bit larger than it needs to be.
-		if f32(g.count) / len(g.items) < 0.8 {
+		if f32(g.count) / f32(len(g.items)) > 0.8 {
 			log("Consider using a larger hashmap")
 		}
 
 		// Need to create a new item at idx, or the next available slot
 		slot := __spatial_grid_coord_to_firt_slot(g, grid_coord)
+		validate_slot(slot)
 		for slot.handle != 0 {
+			validate_slot(slot)
+
 			if slot.next == nil {
 				end := intrinsics.ptr_offset(&g.items[0], len(g.items))
 				next_slot := slot
@@ -91,30 +93,56 @@ spatial_grid_add_or_update :: proc(
 				slot.next = next_slot
 				next_slot.prev = slot
 				slot = next_slot
+				validate_slot(slot)
 			} else {
 				dev_assert(slot.next.prev == slot)
 				// Use the next we've already computed.
 				slot = slot.next
+				validate_slot(slot)
 			}
 		}
 
 		slot.grid_coord = grid_coord
-		slot.handle = idx + 1
 		handle.slot = slot
 		handle.grid_coord = grid_coord
+		validate_slot(slot)
 
 		g.count += 1
 	}
+
+	// Entities can move to a different index
+	handle.slot.handle = idx + 1
+	assert(handle.slot != nil)
 }
 
 spatial_grid_remove :: proc(g: ^Spatial_Grid($N), handle: ^Spatial_Grid_Handle) {
-	if handle.slot.prev != nil {
-		handle.slot.prev.next = handle.slot.next
-	}
+	// We need to remove things by moving the next node to here:
+	// a -> x -> b -> ...  |  a -> b -----> ...
+	//
+	// This is as opposed to a flow-through approach where we make prev.next = next and next.prev = prev, 
+	// which we *don't* want in this case:
+	// a -> x -> b -> ...  |   a ------> b -> ...
+	//
+	// That way, the 'head' of the embedded linked list stays put.
+	// If it doesn't, then it breaks linear probing/finding.
+
+	validate_slot(handle.slot)
 	if handle.slot.next != nil {
-		handle.slot.next.prev = handle.slot.prev
+		next := handle.slot.next
+		prev := handle.slot.prev
+		handle.slot^ = handle.slot.next^
+		handle.slot.prev = prev
+		if handle.slot.next != nil {
+			handle.slot.next.prev = handle.slot
+		}
+		next^ = {}
+		validate_slot(handle.slot)
+	} else if handle.slot.prev != nil {
+		handle.slot.prev.next = nil
+		handle.slot^ = {}
+		validate_slot(handle.slot)
 	}
-	handle.slot^ = {}
+
 	handle^ = {}
 
 	g.count -= 1
@@ -127,6 +155,17 @@ Spatial_Grid_Iterator :: struct {
 spatial_grid_iterator :: proc(g: ^Spatial_Grid($N), pos: Vec2) -> Spatial_Grid_Iterator {
 	coord := __spatial_grid_pos_to_coord(g, pos)
 	slot := __spatial_grid_coord_to_firt_slot(g, coord)
+	if slot.grid_coord != coord {
+		end := intrinsics.ptr_offset(&g.items[0], len(g.items))
+		for slot.handle != 0 && slot.grid_coord != coord {
+			slot = intrinsics.ptr_offset(slot, 1)
+			if slot == end {
+				// wrap back around.
+				slot = &g.items[0]
+			}
+		}
+	}
+
 	if slot.handle == 0 {
 		slot = nil
 	}
@@ -143,6 +182,11 @@ spatial_grid_iterate :: proc(it: ^Spatial_Grid_Iterator) -> (int, bool) {
 	return idx, true
 }
 
-spatial_grid_print :: proc(g: ^Spatial_Grid) {
-	// TODO: implement
+validate_slot :: proc(slot: ^Spatial_Grid_Item) {
+	if slot.next != nil {
+		dev_assert(slot.next.prev == slot)
+	}
+	if slot.prev != nil {
+		dev_assert(slot.prev.next == slot)
+	}
 }

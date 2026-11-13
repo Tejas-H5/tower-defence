@@ -17,7 +17,7 @@ render_game :: proc(state: ^Game_State) {
 				color := pool.items[i].color
 				health := pool.items[i].health
 				size := pool.items[i].size
-				position := pool.items[i].position
+				position := pool.items[i]._position
 				position_prev := pool.items[i].position_prev
 
 				color.a = u8(255 * math.lerp(f32(0.1), 1, math.saturate(health / 100)))
@@ -52,6 +52,7 @@ render_game :: proc(state: ^Game_State) {
 			debug_text_entry(&debug_text_pos, "%v enemies", state.enemies.count);
 			debug_text_entry(&debug_text_pos, "%v towers", state.towers.count);
 			debug_text_entry(&debug_text_pos, "%v bullets", state.bullets.count);
+			debug_text_entry(&debug_text_pos, "%v spatial grid", state.spatial_grid.count);
 
 			debug_text_entry(&debug_text_pos, "%.3f input", min(1 / state.perf.input, 120))
 			state.perf.input = 0
