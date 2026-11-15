@@ -112,7 +112,7 @@ init :: proc(state: ^Game_State) {
 	}
 
 	pool_add(&state.bases, {
-		size   = 100,
+		size   = 20,
 		color  = COLOR_PLAYER,
 		health = 100,
 	})

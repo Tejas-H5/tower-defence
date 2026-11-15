@@ -110,20 +110,10 @@ update_game :: proc(state: ^Game_State, dt: f32) {
 						target, ok := closest_entity_SLOWWW(&state.enemies, pos, MAX_RANGE)
 						if ok {
 							BULLET_SPEED :: 10_000
-							velocity :=
-								BULLET_SPEED *
+							velocity := 
+								BULLET_SPEED * 
 								linalg.normalize0(state.enemies.items[target]._position - pos)
-							h := pool_add(
-								&state.bullets,
-								{
-									health = 100,
-									lifetime_timer = 5,
-									velocity = velocity,
-									size = 5,
-									color = COLOR_PLAYER,
-								},
-							)
-							set_entity_position(state, &state.bullets, h, pos)
+							h := add_bullet(state, pos, velocity)
 						}
 					}
 				} else if is_enemy_pool {

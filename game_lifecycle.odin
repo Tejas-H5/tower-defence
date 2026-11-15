@@ -20,19 +20,22 @@ add_tower :: proc(state: ^Game_State, position: Vec2) {
 	t := pool_add(&state.towers, {
 		color = COLOR_PLAYER,
 		health = 100,
-		size = 20,
-		shoot_cooldown = 0.2, shoot_cooldown_timer = 1,
+		size = 10,
+		shoot_cooldown = 0.1, shoot_cooldown_timer = 1,
 	})
 	set_entity_position(state, &state.towers, t, position)
 }
 
-add_bullet :: proc(state: ^Game_State, position: Vec2, velocity: Vec2) {
+add_bullet :: proc(state: ^Game_State, position: Vec2, velocity: Vec2) -> int {
 	b := pool_add(&state.bullets, {
-		color    = COLOR_PLAYER,
-		size     = 5,
+		health = 100,
+		lifetime_timer = 5,
 		velocity = velocity,
+		size = 5,
+		color = COLOR_PLAYER,
 	})
 	set_entity_position(state, &state.bullets, b, position)
+	return b
 }
 
 is_dead :: proc(e: Entity) -> bool {
@@ -46,7 +49,7 @@ kill_entity :: proc(g: ^Game_State, pool: ^Item_Pool(Entity), i: int) {
 
 set_entity_position :: proc(g: ^Game_State, pool: ^Item_Pool(Entity), i: int,  pos: Vec2) {
 	pool.items[i]._position = pos
-	spatial_grid_add_or_update(&g.spatial_grid, &pool.items[i].spatial_grid_handle, pos, i)
+	spatial_grid_add_or_update(&g.spatial_grid, &pool.items[i].spatial_grid_handle, pos, pool.items[i].size / 2, i)
 }
 
 closest_entity_SLOWWW :: proc(pool: ^Item_Pool(Entity), pos: Vec2, max_range: f32) -> (int, bool) {

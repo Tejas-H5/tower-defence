@@ -54,13 +54,20 @@ render_game :: proc(state: ^Game_State) {
 			debug_text_entry(&debug_text_pos, "%v bullets", state.bullets.count);
 			debug_text_entry(&debug_text_pos, "%v spatial grid", state.spatial_grid.count);
 
-			debug_text_entry(&debug_text_pos, "%.3f input", min(1 / state.perf.input, 120))
+			warn_abt_perf :: proc(val: f64, subsystem: string) -> f64 {
+				if val < 30 {
+					log(subsystem, "was slow!!!")
+				}
+				return val
+			}
+
+			debug_text_entry(&debug_text_pos, "%.3f input", warn_abt_perf(min(1 / state.perf.input, 120), "input"))
 			state.perf.input = 0
-			debug_text_entry(&debug_text_pos, "%.3f physics", min(1 / state.perf.physics, 120))
+			debug_text_entry(&debug_text_pos, "%.3f physics", warn_abt_perf(min(1 / state.perf.physics, 120), "physics"))
 			state.perf.physics = 0
-			debug_text_entry(&debug_text_pos, "%.3f ai", min(1 / state.perf.ai, 120))
+			debug_text_entry(&debug_text_pos, "%.3f ai", warn_abt_perf(min(1 / state.perf.ai, 120), "ai"))
 			state.perf.ai = 0
-			debug_text_entry(&debug_text_pos, "%.3f apply_phase", min(1 / state.perf.apply_phase, 120))
+			debug_text_entry(&debug_text_pos, "%.3f apply_phase", warn_abt_perf(min(1 / state.perf.apply_phase, 120), "apply_phase"))
 			state.perf.apply_phase = 0
 		}
 

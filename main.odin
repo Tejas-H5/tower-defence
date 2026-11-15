@@ -1,21 +1,17 @@
 package main
 
-import "core:testing"
-
 state: Game_State
 
-TESTING :: false
-
 main :: proc() {
-	if TESTING {
-		run_test()
-		return
-	}
+	// main_program()
+	run_test()
+	// run_interactive_test()
+}
 
+main_program :: proc() {
 	init_window("Tower defender")
 
 	init(&state)
-
 
 	PHYSICS_TIMESTEP :: 0.02
 
@@ -43,9 +39,4 @@ main :: proc() {
 	}
 
 	close_window()
-}
-
-run_test :: proc() {
-	t := new(testing.T)
-	test_spatial_grid_swap_positions(t)
 }
