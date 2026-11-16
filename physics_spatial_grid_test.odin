@@ -9,8 +9,9 @@ Test_Entity :: struct {
 	radius: f32,
 }
 
-add_test_entity :: proc(g: ^Spatial_Grid($N), e:  ^Test_Entity) {
-	spatial_grid_add_or_update(g, &e.handle, e.pos, e.radius, e.idx)
+add_test_entity :: proc(t: ^testing.T, g: ^Spatial_Grid($N), e:  ^Test_Entity) {
+	spatial_grid_add_or_update(g, &e.handle, e.pos, e.radius, e.idx, nil)
+	__spatial_grid_validate(t, g)
 }
 
 expect_indices_at_pos :: proc(t: ^testing.T, g: ^Spatial_Grid($N), pos: Vec2, expected_indices: []int, loc := #caller_location)  {
@@ -27,13 +28,36 @@ expect_indices_at_pos :: proc(t: ^testing.T, g: ^Spatial_Grid($N), pos: Vec2, ex
 	testing.expect_value(t, count, len(expected_indices), loc)
 }
 
+// Useful when testing.
+__spatial_grid_validate :: proc(t: ^testing.T, g: ^Spatial_Grid($N)) {
+	total_count := 0
+
+	for &i in g.items {
+		handle := i.first
+		testing.expect_value(t, i.visited, false)
+		for handle != nil {
+			testing.expect_value(t, handle.item, &i)
+			if handle.next != nil {
+				testing.expect_value(t, handle.next.prev, handle)
+			}
+			if handle.prev != nil {
+				testing.expect_value(t, handle.prev.next, handle)
+			}
+			total_count += 1
+			handle = handle.next
+		}
+	}
+
+	testing.expect_value(t, total_count, g.count);
+}
+
 @(test)
 test_spatial_grid_insert_one :: proc(t: ^testing.T) {
 	grid := Spatial_Grid(5){ grid_size = f32(10) }
 
 	entity := Test_Entity{pos={0, 0}, idx=0, radius = 1}
 
-	add_test_entity(&grid, &entity)
+	add_test_entity(t, &grid, &entity)
 
 	expect_indices_at_pos(t, &grid, {0, 0}, []int{ 0 })
 	testing.expect_value(t, grid.count, 1);
@@ -47,8 +71,8 @@ test_spatial_grid_insert_two_same_spot :: proc(t: ^testing.T) {
 	entity0 := Test_Entity{pos={0, 0}, idx = 0, radius = 1}
 	entity1 := Test_Entity{pos={0, 0}, idx = 1, radius = 1}
 
-	add_test_entity(&grid, &entity0)
-	add_test_entity(&grid, &entity1)
+	add_test_entity(t, &grid, &entity0)
+	add_test_entity(t, &grid, &entity1)
 
 	expect_indices_at_pos(t, &grid, {0, 0}, []int{ 0, 1 })
 	testing.expect_value(t, grid.count, 2);
@@ -62,8 +86,8 @@ test_spatial_grid_insert_two_different_spots :: proc(t: ^testing.T) {
 	entity0 := Test_Entity{pos={0, 0},  idx = 0, radius = 1}
 	entity1 := Test_Entity{pos={10, 0}, idx = 1, radius = 1}
 
-	add_test_entity(&grid, &entity0)
-	add_test_entity(&grid, &entity1)
+	add_test_entity(t, &grid, &entity0)
+	add_test_entity(t, &grid, &entity1)
 
 	expect_indices_at_pos(t, &grid, {0, 0}, []int{ 0 })
 	expect_indices_at_pos(t, &grid, {9.9999, 0}, []int{ 0 })
@@ -79,7 +103,7 @@ test_spatial_grid_update_same_spot :: proc(t: ^testing.T) {
 	grid := Spatial_Grid(5){ grid_size = f32(10) }
 
 	entity := Test_Entity{pos={0, 0}, idx = 0, radius = 1}
-	add_test_entity(&grid, &entity)
+	add_test_entity(t, &grid, &entity)
 
 	expect_indices_at_pos(t, &grid, {0, 0}, []int{ 0 })
 	testing.expect_value(t, grid.count, 1);
@@ -90,9 +114,9 @@ test_spatial_grid_update_new_spot :: proc(t: ^testing.T) {
 	grid := Spatial_Grid(5){ grid_size = f32(10) }
 
 	entity := Test_Entity{pos={0, 0}, idx = 0, radius = 1}
-	add_test_entity(&grid, &entity)
+	add_test_entity(t, &grid, &entity)
 	entity.pos = {10, 0}
-	add_test_entity(&grid, &entity)
+	add_test_entity(t, &grid, &entity)
 
 	expect_indices_at_pos(t, &grid, {0, 0}, []int{})
 	expect_indices_at_pos(t, &grid, {10, 0}, []int{0})
@@ -107,39 +131,58 @@ test_spatial_grid_update_new_spot_with_other_items :: proc(t: ^testing.T) {
 	entity0 := Test_Entity{pos={0, 0},  idx = 0, radius = 1}
 	entity1 := Test_Entity{pos={10, 0}, idx = 1, radius = 1}
 
-	add_test_entity(&grid, &entity0)
-	add_test_entity(&grid, &entity1)
+	add_test_entity(t, &grid, &entity0)
+	add_test_entity(t, &grid, &entity1)
 
 	entity0.pos = {10, 0}
-	add_test_entity(&grid, &entity0)
+	add_test_entity(t, &grid, &entity0)
 
 	expect_indices_at_pos(t, &grid, {0, 0}, []int{})
 	expect_indices_at_pos(t, &grid, {10, 0}, []int{1, 0})
 	testing.expect_value(t, grid.count, 2);
 }
 
+test_spatial_grid_swap_positions_internal :: proc(t: ^testing.T, c1, c2: Vec2) {
+	grid := Spatial_Grid(5){ grid_size = f32(10) }
+
+	entity0 := Test_Entity{pos=c1,  idx = 0, radius = 1}
+	entity1 := Test_Entity{pos=c2, idx = 1, radius = 1}
+
+	add_test_entity(t, &grid, &entity0)
+	add_test_entity(t, &grid, &entity1)
+
+	expect_indices_at_pos(t, &grid, c1, []int{0})
+	expect_indices_at_pos(t, &grid, c2, []int{1})
+
+	entity0.pos = c2
+	entity1.pos = c1
+	add_test_entity(t, &grid, &entity0)
+	add_test_entity(t, &grid, &entity1)
+
+	expect_indices_at_pos(t, &grid, c1, []int{1})
+	expect_indices_at_pos(t, &grid, c2, []int{0})
+	testing.expect_value(t, grid.count, 2);
+}
+
 
 @(test)
 test_spatial_grid_swap_positions:: proc(t: ^testing.T) {
+	test_spatial_grid_swap_positions_internal(t, {0, 0}, {0, 10})
+}
+
+
+@(test)
+test_spatial_grid_swap_positions_works_with_colliding_hash :: proc(t: ^testing.T) {
 	grid := Spatial_Grid(5){ grid_size = f32(10) }
 
-	entity0 := Test_Entity{pos={0, 0},  idx = 0, radius = 1}
-	entity1 := Test_Entity{pos={10, 0}, idx = 1, radius = 1}
+	// Make sure our coordinates will collide
+	coord1 := Vec2{0, 0}
+	coord2 := Vec2{0, 50}
+	idx1 := __spatial_grid_coord_to_hash(spatial_grid_pos_to_coord(&grid,coord1)) % len(grid.items)
+	idx2 := __spatial_grid_coord_to_hash(spatial_grid_pos_to_coord(&grid,coord2)) % len(grid.items)
+	testing.expect_value(t, idx1, idx2)
 
-	add_test_entity(&grid, &entity0)
-	add_test_entity(&grid, &entity1)
-
-	expect_indices_at_pos(t, &grid, {0, 0}, []int{0})
-	expect_indices_at_pos(t, &grid, {10, 0}, []int{1})
-
-	entity0.pos = {10, 0}
-	entity1.pos = {0, 0}
-	add_test_entity(&grid, &entity0)
-	add_test_entity(&grid, &entity1)
-
-	expect_indices_at_pos(t, &grid, {0, 0}, []int{1})
-	expect_indices_at_pos(t, &grid, {10, 0}, []int{0})
-	testing.expect_value(t, grid.count, 2);
+	test_spatial_grid_swap_positions_internal(t, coord1, coord2)
 }
 
 @(test)
@@ -153,7 +196,7 @@ test_spatial_grid_iterate_rect :: proc(t: ^testing.T) {
 		{pos={10, 10}, idx = 3, radius = 1},
 	}
 	for &e in entities {
-		add_test_entity(&grid, &e)
+		add_test_entity(t, &grid, &e)
 	}
 
 	count := 0
@@ -176,7 +219,7 @@ test_spatial_grid_iterate_line_through_the_middle :: proc(t: ^testing.T) {
 		{pos={10, 10}, idx = 3, radius = 1},
 	}
 	for &e in entities {
-		add_test_entity(&grid, &e)
+		add_test_entity(t, &grid, &e)
 	}
 
 	expected_indices := []int{0, 1}

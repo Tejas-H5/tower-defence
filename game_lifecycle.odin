@@ -16,7 +16,7 @@ advance_timer :: proc(val: ^f32, dt: f32) {
 	}
 }
 
-add_tower :: proc(state: ^Game_State, position: Vec2) {
+add_tower :: proc(state: ^Game_State, position: Vec2) -> int {
 	t := pool_add(&state.towers, {
 		color = COLOR_PLAYER,
 		health = 100,
@@ -24,6 +24,7 @@ add_tower :: proc(state: ^Game_State, position: Vec2) {
 		shoot_cooldown = 0.1, shoot_cooldown_timer = 1,
 	})
 	set_entity_position(state, &state.towers, t, position)
+	return t
 }
 
 add_bullet :: proc(state: ^Game_State, position: Vec2, velocity: Vec2) -> int {
@@ -35,6 +36,7 @@ add_bullet :: proc(state: ^Game_State, position: Vec2, velocity: Vec2) -> int {
 		color = COLOR_PLAYER,
 	})
 	set_entity_position(state, &state.bullets, b, position)
+	state.bullets.items[b].position_prev = position
 	return b
 }
 
@@ -44,12 +46,29 @@ is_dead :: proc(e: Entity) -> bool {
 
 kill_entity :: proc(g: ^Game_State, pool: ^Item_Pool(Entity), i: int) {
 	pool.items[i].health = -1
-	spatial_grid_remove(&g.spatial_grid, &pool.items[i].spatial_grid_handle)
+}
+
+pool_to_type :: proc(g: ^Game_State, pool: ^Item_Pool(Entity)) -> ItemType {
+	switch {
+	case pool == &g.player:     return .Player;
+	case pool == &g.bases:      return .Base;
+	case pool == &g.enemies:    return .Enemy;
+	case pool == &g.towers:     return .Tower;
+	case pool == &g.bullets:    return .Bullet;
+	}
+	return .Player;
 }
 
 set_entity_position :: proc(g: ^Game_State, pool: ^Item_Pool(Entity), i: int,  pos: Vec2) {
 	pool.items[i]._position = pos
-	spatial_grid_add_or_update(&g.spatial_grid, &pool.items[i].spatial_grid_handle, pos, pool.items[i].size / 2, i)
+	spatial_grid_add_or_update(
+		&g.spatial_grid,
+		&pool.items[i].spatial_grid_handle,
+		pos,
+		pool.items[i].size / 2,
+		i,
+		pool
+	)
 }
 
 closest_entity_SLOWWW :: proc(pool: ^Item_Pool(Entity), pos: Vec2, max_range: f32) -> (int, bool) {

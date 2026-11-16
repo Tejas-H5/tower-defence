@@ -5,11 +5,78 @@ import "core:math/linalg"
 import "core:math/rand"
 
 render_game :: proc(state: ^Game_State) {
+	set_mouse_cursor(.None)
+
 	screen_center := Vec2{width(), height()} / 2
+
+	// Perform physics update in a deterministic manner.
+	// Plot twist: the render function owns physics update ??
+	// Maybe consider multithreading later but how do u make it deterministic? not sure.
+	{
+		PHYSICS_TIMESTEP :: 0.02
+
+		MAX_PHYSICS_TO_CATCH_UP_ON :: 5 * PHYSICS_TIMESTEP
+
+		// We would implement slow motion / pausing here.
+		state.physics_to_catch_up_on += get_delta_time()
+		if state.physics_to_catch_up_on > MAX_PHYSICS_TO_CATCH_UP_ON {
+			// If we don't do this, a little bit of lag will cause state.physics_to_catch_up_on to
+			// infinitely increase, causing each subsequent frame to take longer and longer.
+			// Instead, we can just slow down the simulation a bit by doing this.
+			state.physics_to_catch_up_on = MAX_PHYSICS_TO_CATCH_UP_ON
+		}
+
+		// Ensure determinism of the physics somewhat.
+		dt := f32(PHYSICS_TIMESTEP)
+		for state.physics_to_catch_up_on > 0 {
+			state.physics_to_catch_up_on -= dt
+			update_game(state, dt)
+		}
+	}
+
+
 
 	// World
 	{
 		draw_bg(COLOR_WORLD_BG)
+
+
+		// Debug world things
+		{
+			// Physics grid
+			{
+				bottom_left := screen_to_world(state.view, {0, height()})
+				top_right   := screen_to_world(state.view, {width(), 0})
+
+				bottom_left_grid := spatial_grid_pos_to_coord(&state.spatial_grid, bottom_left)
+				top_right_grid   := spatial_grid_pos_to_coord(&state.spatial_grid, top_right)
+
+				for x in bottom_left_grid.x..<top_right_grid.x {
+					for y in bottom_left_grid.y..<top_right_grid.y {
+						rect := Rect{ 
+							{f32(x), f32(y)} * state.spatial_grid.grid_size, 
+							state.spatial_grid.grid_size, 
+						}
+
+						draw_rect_outline_world(state, rect, 3, Color{0, 0, 0, 100})
+						count := 0
+						slot := spatial_grid_coord_to_firt_slot(&state.spatial_grid, {x, y})
+						if slot != nil {
+							handle := slot.first
+							for handle != nil {
+								count += 1
+								handle = handle.next
+							}
+						}
+
+						heat := f32(count) / f32(state.spatial_grid.count)
+						heat_bytes := byte(math.floor(255 * math.saturate(heat)))
+						draw_rect_world(state, rect, Color{0, 0, 0, heat_bytes})
+					}
+				}
+			}
+		}
+
 
 		for pool in state.item_pools {
 			for i in 0..<pool.count {
@@ -69,6 +136,22 @@ render_game :: proc(state: ^Game_State) {
 			state.perf.ai = 0
 			debug_text_entry(&debug_text_pos, "%.3f apply_phase", warn_abt_perf(min(1 / state.perf.apply_phase, 120), "apply_phase"))
 			state.perf.apply_phase = 0
+
+
+			if false {
+				grid := &state.spatial_grid
+
+				debug_text_entry(
+					&debug_text_pos,
+					"%v h, %v a, %v r, + %v, - %v, ~ %v",
+					grid.num_hops,
+					grid.num_accesses,
+					f64(grid.num_hops) / f64(grid.num_accesses),
+					grid.num_inserts,
+					grid.num_removals,
+					grid.num_updates,
+				)
+			}
 		}
 
 		// Cursor

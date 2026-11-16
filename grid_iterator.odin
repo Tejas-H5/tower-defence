@@ -35,9 +35,9 @@ grid_line_intersection_iterate :: proc(it: ^Grid_Line_Intersection_Iterator) -> 
 
 		grid_coord: f32
 		if positive {
-			grid_coord = math.ceil((val + EPSILON) / grid_size)
+			grid_coord = math.ceil(val / grid_size + EPSILON)
 		} else {
-			grid_coord = math.floor((val - EPSILON) / grid_size)
+			grid_coord = math.floor(val / grid_size - EPSILON)
 		}
 
 		return grid_coord * grid_size

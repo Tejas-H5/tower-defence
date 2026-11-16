@@ -12,73 +12,100 @@ import "core:math"
 
 Spatial_Grid :: struct($N: uint) {
 	// TODO: Could be SOA ?
+	// TODO: cells
 	items:     [N]Spatial_Grid_Item,
 	grid_size: f32,
 	max_entity_radius: f32,
 	count:     int,
+
+	num_hops: int,
+	num_accesses: int,
+
+	num_removals: int,
+	num_inserts: int,
+	num_updates: int,
 }
 
+
+
 // This is a pretty large structure. Maybe we want to downsize it later at some point.
+// TODO: rename to Spatial_Grid_Cell
 Spatial_Grid_Item :: struct {
-	handle:     int, // This indexes into the main data. Also it's 1-based for ZII
+	first: ^Spatial_Grid_Handle,
+	last:  ^Spatial_Grid_Handle,
+
 	grid_coord: Grid_Coord,
 
 	// Used to dedupe slots when we're iterating all grid x line intersections.
 	visited:    bool,
-
-	next:       ^Spatial_Grid_Item,
-	prev:       ^Spatial_Grid_Item,
 }
 
 Spatial_Grid_Handle :: struct {
-	grid_coord: Grid_Coord,
-	slot:       ^Spatial_Grid_Item,
+	// `handle` indexes into the main data. Also it's 1-based for ZII. 
+	// It's the only way we can tell if a value is present or not - the grid coord isn't
+	// enough because 0, 0 is also a valid grid coord.
+	handle: int, 
+	// The pool this thing is a part of. if Spatial_Grid_Item had a $T parameter, this would be a part of it.
+	pool: rawptr,
+
+	item: ^Spatial_Grid_Item,
+	next: ^Spatial_Grid_Handle,
+	prev: ^Spatial_Grid_Handle,
 }
 
 Grid_Coord :: [2]i32
 
 
+__spatial_grid_coord_to_hash :: proc(grid_coord: Grid_Coord) -> i32 {
+	// Two large prime numbers
+	return abs(7919 * grid_coord.x + 9973 * grid_coord.y)
+}
+
 __spatial_grid_coord_to_firt_slot_maybe :: proc(
 	g: ^Spatial_Grid($N),
 	grid_coord: Grid_Coord,
 ) -> ^Spatial_Grid_Item {
-	// Two large prime numbers
-	idx := abs(7919 * grid_coord.x + 9973 * grid_coord.y)
+	idx := __spatial_grid_coord_to_hash(grid_coord)
 	return &g.items[idx % len(g.items)]
 }
 
-__spatial_grid_coord_to_firt_slot :: proc(
+spatial_grid_coord_to_firt_slot :: proc(
 	g: ^Spatial_Grid($N),
 	grid_coord: Grid_Coord,
 ) -> ^Spatial_Grid_Item {
 	slot := __spatial_grid_coord_to_firt_slot_maybe(g, grid_coord)
 
-	if slot.handle == 0 || slot.grid_coord == grid_coord {
-		return slot
-	}
+	g.num_accesses += 1
 
 	// We landed on some other grid coord, so need to linear probe to the next one.
 	// If we find a slot with handle == 0 before we find our grid coord, we can actually conclude that
 	// this coordinate just isn't in the grid.
 	end := intrinsics.ptr_offset(&g.items[0], len(g.items))
 	count := len(g.items)
-	for slot.handle != 0 && slot.grid_coord != grid_coord {
+	for !(slot.first == nil || slot.grid_coord == grid_coord) {
 		slot = intrinsics.ptr_offset(slot, 1)
 		if slot == end {
 			// wrap back around.
 			slot = &g.items[0]
 		}
-		count -= 1
-		if count == 0 {
+
+		if slot.grid_coord == grid_coord {
 			break;
 		}
+
+		count -= 1
+		if count == 0 {
+			log("Worst case scenario just occured IRL.")
+			break;
+		}
+		g.num_hops += 1
 	}
 
-	assert(slot.handle == 0 || slot.grid_coord == grid_coord)
+
 	return slot
 }
 
-__spatial_grid_pos_to_coord :: proc(g: ^Spatial_Grid($N), pos: Vec2) -> Vec2i {
+spatial_grid_pos_to_coord :: proc(g: ^Spatial_Grid($N), pos: Vec2) -> Vec2i {
 	grid_coord := Grid_Coord {
 		i32(math.floor(pos.x / g.grid_size)),
 		i32(math.floor(pos.y / g.grid_size)),
@@ -92,6 +119,7 @@ spatial_grid_add_or_update :: proc(
 	pos: Vec2,
 	radius: f32,
 	idx: int,
+	pool: rawptr,
 ) {
 	assert(g.grid_size != 0)
 	assert(handle != nil)
@@ -99,124 +127,141 @@ spatial_grid_add_or_update :: proc(
 	g.max_entity_radius = max(g.max_entity_radius, radius)
 	dev_assert(g.max_entity_radius < g.grid_size / 2, "We need a larger grid")
 
-	grid_coord := __spatial_grid_pos_to_coord(g, pos)
+	grid_coord := spatial_grid_pos_to_coord(g, pos)
 
-	needs_update := handle.grid_coord != grid_coord || handle.slot == nil
+	needs_update := handle.item == nil || handle.item.grid_coord != grid_coord
 	if needs_update {
-		if handle.slot != nil {
+		if handle.item != nil {
 			spatial_grid_remove(g, handle)
-			handle.slot = nil
+			handle.item = nil
+			g.num_updates += 1
+		} else {
+			g.num_inserts += 1
 		}
 
 		assert(g.count < len(g.items))
-		dev_assert(handle.slot == nil)
+		dev_assert(handle.item == nil)
 
 		// Probably our hashmap should be a bit larger than it needs to be.
 		if f32(g.count) / f32(len(g.items)) > 0.8 {
 			log("Consider using a larger hashmap")
 		}
 
-		// Need to create a new item at idx, or the next available slot
-		slot := __spatial_grid_coord_to_firt_slot_maybe(g, grid_coord)
-		validate_slot(slot)
-		for slot.handle != 0 {
-			validate_slot(slot)
+		g.num_accesses += 1
 
-			if slot.next == nil {
-				end := intrinsics.ptr_offset(&g.items[0], len(g.items))
-				next_slot := slot
-				for next_slot.handle != 0 {
-					next_slot = intrinsics.ptr_offset(next_slot, 1)
-					if next_slot == end {
-						// wrap back around.
-						next_slot = &g.items[0]
-					}
-				}
-				slot.next = next_slot
-				next_slot.prev = slot
-				slot = next_slot
-				validate_slot(slot)
-			} else {
-				dev_assert(slot.next.prev == slot)
-				// Use the next we've already computed.
-				slot = slot.next
-				validate_slot(slot)
-			}
+		// Need to create a new item at idx, or the next available slot
+		item := spatial_grid_coord_to_firt_slot(g, grid_coord)
+		assert(item.first == nil || item.grid_coord == grid_coord)
+
+		if item.first == nil {
+			item.grid_coord = grid_coord
+			item.first      = handle
+			item.last       = handle
+		} else {
+			assert(item.last != nil)
+			item.last.next = handle
+			handle.prev    = item.last
+			item.last      = handle
 		}
 
-		slot.grid_coord = grid_coord
-		handle.slot = slot
-		handle.grid_coord = grid_coord
-		validate_slot(slot)
+		handle.item   = item
 
 		g.count += 1
 	}
 
 	// Entities can move to a different index
-	handle.slot.handle = idx + 1
-	assert(handle.slot != nil)
+	handle.handle = idx + 1
+	handle.pool   = pool
+	assert(handle.item != nil);
 }
 
 spatial_grid_remove :: proc(g: ^Spatial_Grid($N), handle: ^Spatial_Grid_Handle) {
-	// We need to remove things by moving the next node to here:
-	// before: a -> x -> b -> ...  | after:  a -> b -----> ...
-	//
-	// This is as opposed to a flow-through approach where we make prev.next = next and next.prev = prev, 
-	// which we *don't* want in this case:
-	// before: a -> x -> b -> ...  | after:  a ------> b -> ...
-	//
-	// That way, the 'head' of the embedded linked list stays put.
-	// If it doesn't, then it breaks linear probing/finding.
-
-	validate_slot(handle.slot)
-	if handle.slot.next != nil {
-		next := handle.slot.next
-		prev := handle.slot.prev
-		visited := handle.slot.visited
-		handle.slot^ = handle.slot.next^
-		handle.slot.prev = prev
-		// Preserving 'visited' allows iteration to not break by re-visiting cells
-		// if we were deleting things while iterating.
-		handle.slot.visited = visited
-
-		if handle.slot.next != nil {
-			handle.slot.next.prev = handle.slot
-		}
-		next^ = {}
-		validate_slot(handle.slot)
-	} else {
-		if handle.slot.prev != nil {
-			handle.slot.prev.next = nil
-		}
-		handle.slot^ = {}
-		validate_slot(handle.slot)
+	if handle.item == nil {
+		return
 	}
 
-	handle^ = {}
+	g.num_removals += 1
+
+	next := handle.next
+	prev := handle.prev
+
+	if prev == nil && next == nil {
+		item := handle.item
+		handle^ = {}
+
+		item^ = {}
+		// We'll also need to move accross subsequent items so that their probing doesnt
+		// stay broken. I.e you could add coordinate c1 at hash h1, add another c2 that also hashes to h1, remove
+		// it needs to move accross. You've already inserted a whole bunch of crap after h1 so c2 gets moved over a lot.
+		// We then remove c1. We try to find c2, and we hit a nil slot - the linear probe concludes c2 is not found.
+		// Can be avoided basically by iterating all subsequent non-empty slots and saying 'would this have collided with h1? if so
+		// move it to h1' then you repeat with this new hole - 'would this have collided with this new hole? eventually you'll
+		// reach a second hole and you can stop (ideally).
+
+		hole := item
+		next := intrinsics.ptr_offset(hole, 1)
+		end := intrinsics.ptr_offset(&g.items[0], len(g.items))
+		for {
+			if next == end {
+				next = &g.items[0]
+			}
+			if next.first == nil {
+				break
+			}
+
+			ptr := __spatial_grid_coord_to_firt_slot_maybe(g, next.grid_coord)
+			if ptr == hole {
+				hole^ = next^
+				handle := hole.first
+				for handle != nil {
+					handle.item = hole
+					handle = handle.next
+				}
+				hole = next
+			}
+
+			next = intrinsics.ptr_offset(next, 1)
+		}
+	} else {
+		item := handle.item
+
+		if item.first == handle {
+			item.first = next
+		}
+		if item.last == handle {
+			item.last = prev
+		}
+		if prev != nil {
+			prev.next = next
+		}
+		if next != nil {
+			next.prev = prev
+		}
+		handle^ = {}
+	}
 
 	g.count -= 1
 }
 
 Spatial_Grid_Iterator :: struct {
-	slot: ^Spatial_Grid_Item,
+	slot: ^Spatial_Grid_Handle,
 }
 
 spatial_grid_iterator :: proc(g: ^Spatial_Grid($N), pos: Vec2) -> Spatial_Grid_Iterator {
-	coord := __spatial_grid_pos_to_coord(g, pos)
+	coord := spatial_grid_pos_to_coord(g, pos)
 	return spatial_grid_iterator_from_coords(g, coord)
 }
 
 spatial_grid_iterator_from_coords :: proc(g: ^Spatial_Grid($N), coord: Grid_Coord) -> Spatial_Grid_Iterator {
-	slot := __spatial_grid_coord_to_firt_slot(g, coord)
-	if slot.handle == 0 {
-		slot = nil
-	} else if slot.visited {
-		slot = nil
+	item := spatial_grid_coord_to_firt_slot(g, coord)
+	handle: ^Spatial_Grid_Handle
+	if item != nil {
+		handle = item.first
 	}
-	return Spatial_Grid_Iterator{slot = slot}
+	return Spatial_Grid_Iterator{slot = handle}
 }
 
-spatial_grid_iterate :: proc(it: ^Spatial_Grid_Iterator) -> (^Spatial_Grid_Item, bool) {
+spatial_grid_iterate :: proc(it: ^Spatial_Grid_Iterator) -> (^Spatial_Grid_Handle, bool) {
 	if it.slot == nil {
 		return nil, false
 	}
@@ -243,8 +288,8 @@ spatial_grid_rect_iterator :: proc(g: ^Spatial_Grid($N), rect: Rect) -> Spatial_
 	rect.pos -= Vec2{g.max_entity_radius, g.max_entity_radius}
 	rect.size += 2 * Vec2{g.max_entity_radius, g.max_entity_radius}
 
-	from := __spatial_grid_pos_to_coord(g, rect.pos)
-	to   := __spatial_grid_pos_to_coord(g, rect.pos + rect.size)
+	from := spatial_grid_pos_to_coord(g, rect.pos)
+	to   := spatial_grid_pos_to_coord(g, rect.pos + rect.size)
 
 	return {
 		g    = g,
@@ -256,7 +301,7 @@ spatial_grid_rect_iterator :: proc(g: ^Spatial_Grid($N), rect: Rect) -> Spatial_
 }
 
 // Iterates all rectangles that intersect with this one.
-spatial_grid_rect_iterate :: proc(it: ^Spatial_Grid_Rect_Iterator($N)) -> (^Spatial_Grid_Item, bool) {
+spatial_grid_rect_iterate :: proc(it: ^Spatial_Grid_Rect_Iterator($N)) -> (^Spatial_Grid_Handle, bool) {
 	res, ok := spatial_grid_iterate(&it.point_it)
 	for !ok { 
 		it.pos += { 1, 0 }
@@ -301,7 +346,7 @@ spatial_grid_line_iterator :: proc(g: ^Spatial_Grid($N), line: Line) -> Spatial_
 }
 
 // NOTE: doesn't work when you're inserting new items. At least, I intentionally don't handle that case.
-spatial_grid_line_iterate :: proc(it: ^Spatial_Grid_Line_Iterator($N)) -> (^Spatial_Grid_Item, bool)  {
+spatial_grid_line_iterate :: proc(it: ^Spatial_Grid_Line_Iterator($N)) -> (^Spatial_Grid_Handle, bool)  {
 	slot, has_slot := spatial_grid_rect_iterate(&it.rect_it)
 
 	for !has_slot {
@@ -314,9 +359,11 @@ spatial_grid_line_iterate :: proc(it: ^Spatial_Grid_Line_Iterator($N)) -> (^Spat
 			// This is more efficient than looping over every single grid item
 			grid_it := grid_line_intersection_iterator(it.start, it.end, it.grid_it.grid_size)
 			for pos in grid_line_intersection_iterate(&grid_it) {
-				coord := __spatial_grid_pos_to_coord(it.g, pos)
-				slot := __spatial_grid_coord_to_firt_slot(it.g, coord)
-				slot.visited = false
+				coord := spatial_grid_pos_to_coord(it.g, pos)
+				slot := spatial_grid_coord_to_firt_slot(it.g, coord)
+				if slot != nil {
+					slot.visited = false
+				}
 			}
 			break
 		}
@@ -325,18 +372,9 @@ spatial_grid_line_iterate :: proc(it: ^Spatial_Grid_Line_Iterator($N)) -> (^Spat
 	if has_slot {
 		is_head := slot.prev == nil
 		if is_head {
-			slot.visited = true
+			slot.item.visited = true
 		}
 	}
 
 	return slot, has_slot
-}
-
-validate_slot :: proc(slot: ^Spatial_Grid_Item) {
-	if slot.next != nil {
-		dev_assert(slot.next.prev == slot)
-	}
-	if slot.prev != nil {
-		dev_assert(slot.prev.next == slot)
-	}
 }

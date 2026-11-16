@@ -15,6 +15,7 @@ screen_centre_offset :: proc() -> Vec2 {
 	return {(width() - height()) / 2, 0}
 }
 
+// Screen coordinates +y is down. But world coordinates +y is up
 world_to_screen :: proc(view: View_Bounds, pos: Vec2) -> Vec2 {
 	// We want to map -size/2 <-> size/2 to 0 <-> 1
 	normalized := 0.5 + ((pos - view.pos) / view.size)

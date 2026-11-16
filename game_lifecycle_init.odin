@@ -33,6 +33,8 @@ MAX_TOTAL ::
 	BULLETS_MAX
 
 Game_State :: struct {
+	physics_to_catch_up_on: f32,
+
 	view: View_Bounds,
 
 	player_memory:  Item_Pool_Memory(Entity, PLAYER_MAX),
@@ -48,13 +50,21 @@ Game_State :: struct {
 	enemies: Item_Pool(Entity),
 	towers:  Item_Pool(Entity),
 	bullets: Item_Pool(Entity),
-	item_pools: [5]^Item_Pool(Entity),
+	item_pools: [ItemType]^Item_Pool(Entity),
 
 	mouse_delta, prev_mouse_pos : Vec2,
 
 	perf: struct {
 		input, physics, ai, apply_phase: f64,
 	},
+}
+
+ItemType :: enum {
+	Player,
+	Base,
+	Enemy,
+	Tower,
+	Bullet,
 }
 
 Base :: struct {
@@ -93,7 +103,7 @@ init :: proc(state: ^Game_State) {
 		size = 1000,
 	}
 
-	state.spatial_grid.grid_size = 50
+	state.spatial_grid.grid_size = 200
 
 	state.player  = memory_to_pool(&state.player_memory)
 	state.bases   = memory_to_pool(&state.bases_memory)
@@ -104,11 +114,11 @@ init :: proc(state: ^Game_State) {
 	// NOTE: defines a bunch of things like the render order and 
 	// update order. We might want to seperate this later.
 	state.item_pools = {
-		&state.bases,
-		&state.enemies,
-		&state.towers,
-		&state.bullets,
-		&state.player,
+		.Base   = &state.bases,
+		.Enemy  = &state.enemies,
+		.Tower  = &state.towers,
+		.Bullet = &state.bullets,
+		.Player = &state.player,
 	}
 
 	pool_add(&state.bases, {
@@ -123,7 +133,8 @@ init :: proc(state: ^Game_State) {
 		health = 100,
 	}
 
-	for i in 0..<1000 {
+	for i in 0..<1000 { // This is the goal
+	// for i in 0..<10 { // For testing purposes
 		angle := rand.float32_range(-math.PI, math.PI)
 		pos := 1000 * Vec2{math.cos(angle), math.sin(angle)}
 		e := pool_add(&state.enemies, {
@@ -133,5 +144,11 @@ init :: proc(state: ^Game_State) {
 			color         = {255, 0, 0, 255},
 		})
 		set_entity_position(state, &state.enemies, e, pos)
+	}
+
+	cg: Circle_Generator
+	for pos in circle_generate(&cg, 40) {
+		t := add_tower(state, pos * 50)
+		state.towers.items[t].shoot_cooldown_timer = rand.float32_range(0, state.towers.items[t].shoot_cooldown);
 	}
 }
