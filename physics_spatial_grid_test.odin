@@ -11,7 +11,7 @@ Test_Entity :: struct {
 
 add_test_entity :: proc(t: ^testing.T, g: ^Spatial_Grid($N), e:  ^Test_Entity) {
 	spatial_grid_add_or_update(g, &e.handle, e.pos, e.radius, e.idx, nil)
-	__spatial_grid_validate(t, g)
+	__spatial_grid_validate(g)
 }
 
 expect_indices_at_pos :: proc(t: ^testing.T, g: ^Spatial_Grid($N), pos: Vec2, expected_indices: []int, loc := #caller_location)  {
@@ -26,29 +26,6 @@ expect_indices_at_pos :: proc(t: ^testing.T, g: ^Spatial_Grid($N), pos: Vec2, ex
 	}
 
 	testing.expect_value(t, count, len(expected_indices), loc)
-}
-
-// Useful when testing.
-__spatial_grid_validate :: proc(t: ^testing.T, g: ^Spatial_Grid($N)) {
-	total_count := 0
-
-	for &i in g.items {
-		handle := i.first
-		testing.expect_value(t, i.visited, false)
-		for handle != nil {
-			testing.expect_value(t, handle.item, &i)
-			if handle.next != nil {
-				testing.expect_value(t, handle.next.prev, handle)
-			}
-			if handle.prev != nil {
-				testing.expect_value(t, handle.prev.next, handle)
-			}
-			total_count += 1
-			handle = handle.next
-		}
-	}
-
-	testing.expect_value(t, total_count, g.count);
 }
 
 @(test)

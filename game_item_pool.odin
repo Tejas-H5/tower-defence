@@ -26,7 +26,7 @@ pool_add :: proc(p: ^Item_Pool($T), val: T) -> int {
 	return idx
 }
 
-pool_remove :: proc(p: ^Item_Pool($T), idx: int) {
+pool_unordered_remove :: proc(p: ^Item_Pool($T), idx: int) {
 	assert(idx < p.count)
 	p.items[idx] = p.items[p.count - 1]
 	p.count -= 1

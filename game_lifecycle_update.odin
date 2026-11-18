@@ -181,7 +181,7 @@ update_game :: proc(game: ^Game_State, dt: f32) {
 
 				if pool.items[i].health <= 0 || pool.items[i].lifetime_timer < 0 {
 					spatial_grid_remove(&game.spatial_grid, &pool.items[i].spatial_grid_handle)
-					pool_remove(pool, i)
+					pool_unordered_remove(pool, i)
 					i -= 1
 				}
 			}
@@ -189,3 +189,4 @@ update_game :: proc(game: ^Game_State, dt: f32) {
 	}
 	game.perf.apply_phase += update_timer(&t)
 }
+

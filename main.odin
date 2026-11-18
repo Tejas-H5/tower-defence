@@ -3,8 +3,8 @@ package main
 state: Game_State
 
 main :: proc() {
-	// main_program()
-	run_test()
+	main_program()
+	// run_test()
 	// run_interactive_test()
 }
 

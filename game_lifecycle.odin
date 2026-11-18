@@ -69,6 +69,7 @@ set_entity_position :: proc(g: ^Game_State, pool: ^Item_Pool(Entity), i: int,  p
 		i,
 		pool
 	)
+	__spatial_grid_validate_slot(&g.spatial_grid, pool.items[i].spatial_grid_handle.slot)
 }
 
 closest_entity_SLOWWW :: proc(pool: ^Item_Pool(Entity), pos: Vec2, max_range: f32) -> (int, bool) {
