@@ -26,6 +26,8 @@ pool_add :: proc(p: ^Item_Pool($T), val: T) -> int {
 	return idx
 }
 
+// Returns the item that you've swapped in, so that you can fix up it's internal
+// indices and whatnot as needed
 pool_unordered_remove :: proc(p: ^Item_Pool($T), idx: int) {
 	assert(idx < p.count)
 	p.items[idx] = p.items[p.count - 1]

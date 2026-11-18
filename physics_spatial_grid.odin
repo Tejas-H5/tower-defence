@@ -37,6 +37,7 @@ Spatial_Grid_Item :: struct {
 	grid_coord: Grid_Coord,
 
 	// Used to dedupe slots when we're iterating all grid x line intersections.
+	// TO support nested queries, change this to a number we increment/decrement.
 	visited:    bool,
 }
 
@@ -75,7 +76,7 @@ __spatial_grid_coord_to_firt_slot_maybe :: proc(
 	return &g.items[idx % len(g.items)]
 }
 
-spatial_grid_coord_to_firt_slot :: proc(
+spatial_grid_coord_to_first_slot :: proc(
 	g: ^Spatial_Grid($N),
 	grid_coord: Grid_Coord,
 ) -> ^Spatial_Grid_Item {
@@ -107,11 +108,10 @@ spatial_grid_coord_to_firt_slot :: proc(
 		g.num_hops += 1
 	}
 
-
 	return slot
 }
 
-spatial_grid_pos_to_coord :: proc(g: ^Spatial_Grid($N), pos: Vec2) -> Vec2i {
+pos_to_grid_coord :: proc(g: ^Spatial_Grid($N), pos: Vec2) -> Grid_Coord {
 	grid_coord := Grid_Coord {
 		i32(math.floor(pos.x / g.grid_size)),
 		i32(math.floor(pos.y / g.grid_size)),
@@ -119,9 +119,17 @@ spatial_grid_pos_to_coord :: proc(g: ^Spatial_Grid($N), pos: Vec2) -> Vec2i {
 	return grid_coord
 }
 
+grid_coord_to_pos :: proc(g: ^Spatial_Grid($N), pos: Grid_Coord) -> Vec2 {
+	return Vec2{
+		f32(pos.x) * g.grid_size,
+		f32(pos.y) * g.grid_size,
+	}
+}
+
 __spatial_grid_new_slot :: proc(g: ^Spatial_Grid($N)) -> ^Spatial_Grid_Slot {
 	for &s in g.slots {
 		if s.handle == 0 {
+			(&s)^ = {}
 			return &s
 		}
 	}
@@ -147,12 +155,13 @@ spatial_grid_add_or_update :: proc(
 
 	slot := handle.slot
 	
+	assert(slot.handle < 100000)
 	__spatial_grid_validate_slot(g, slot)
 
 	g.max_entity_radius = max(g.max_entity_radius, radius)
 	dev_assert(g.max_entity_radius < g.grid_size / 2, "We need a larger grid")
 
-	grid_coord := spatial_grid_pos_to_coord(g, pos)
+	grid_coord := pos_to_grid_coord(g, pos)
 
 	needs_update := slot.item == nil || slot.item.grid_coord != grid_coord
 	if needs_update {
@@ -179,7 +188,7 @@ spatial_grid_add_or_update :: proc(
 		g.num_accesses += 1
 
 		// Need to create a new item at idx, or the next available slot
-		item := spatial_grid_coord_to_firt_slot(g, grid_coord)
+		item := spatial_grid_coord_to_first_slot(g, grid_coord)
 		assert(item.first == nil || item.grid_coord == grid_coord)
 
 		slot.item = item
@@ -330,26 +339,32 @@ Spatial_Grid_Iterator :: struct {
 }
 
 spatial_grid_iterator :: proc(g: ^Spatial_Grid($N), pos: Vec2) -> Spatial_Grid_Iterator {
-	coord := spatial_grid_pos_to_coord(g, pos)
+	coord := pos_to_grid_coord(g, pos)
 	return spatial_grid_iterator_from_coords(g, coord)
 }
 
 spatial_grid_iterator_from_coords :: proc(g: ^Spatial_Grid($N), coord: Grid_Coord) -> Spatial_Grid_Iterator {
-	item := spatial_grid_coord_to_firt_slot(g, coord)
+	item := spatial_grid_coord_to_first_slot(g, coord)
+	if item.grid_coord != coord {
+		item = nil
+	}
+
 	slot: ^Spatial_Grid_Slot
 	if item != nil {
-		// Seems like a hack but I think it's fine.
-		// It supports deduplicating iteration.
-		if !item.visited {
-			slot = item.first
-		}
+		slot = item.first
 	}
 	return Spatial_Grid_Iterator{slot = slot}
 }
 
-spatial_grid_iterate :: proc(it: ^Spatial_Grid_Iterator) -> (^Spatial_Grid_Slot, bool) {
+spatial_grid_iterate :: proc(it: ^Spatial_Grid_Iterator, ignore_visited: bool) -> (^Spatial_Grid_Slot, bool) {
 	if it.slot == nil {
 		return nil, false
+	}
+
+	if ignore_visited {
+		if it.slot.item.visited {
+			return nil, false
+		}
 	}
 
 	this_slot := it.slot
@@ -374,8 +389,8 @@ spatial_grid_rect_iterator :: proc(g: ^Spatial_Grid($N), rect: Rect) -> Spatial_
 	rect.pos -= Vec2{g.max_entity_radius, g.max_entity_radius}
 	rect.size += 2 * Vec2{g.max_entity_radius, g.max_entity_radius}
 
-	from := spatial_grid_pos_to_coord(g, rect.pos)
-	to   := spatial_grid_pos_to_coord(g, rect.pos + rect.size)
+	from := pos_to_grid_coord(g, rect.pos)
+	to   := pos_to_grid_coord(g, rect.pos + rect.size)
 
 	return {
 		g    = g,
@@ -387,8 +402,8 @@ spatial_grid_rect_iterator :: proc(g: ^Spatial_Grid($N), rect: Rect) -> Spatial_
 }
 
 // Iterates all rectangles that intersect with this one.
-spatial_grid_rect_iterate :: proc(it: ^Spatial_Grid_Rect_Iterator($N)) -> (^Spatial_Grid_Slot, bool) {
-	res, ok := spatial_grid_iterate(&it.point_it)
+spatial_grid_rect_iterate :: proc(it: ^Spatial_Grid_Rect_Iterator($N), ignore_visited: bool) -> (^Spatial_Grid_Slot, bool) {
+	res, ok := spatial_grid_iterate(&it.point_it, ignore_visited)
 	for !ok { 
 		it.pos += { 1, 0 }
 		if it.pos.x > it.to.x {
@@ -398,7 +413,7 @@ spatial_grid_rect_iterate :: proc(it: ^Spatial_Grid_Rect_Iterator($N)) -> (^Spat
 			break
 		}
 		it.point_it = spatial_grid_iterator_from_coords(it.g, it.pos)
-		res, ok = spatial_grid_iterate(&it.point_it)
+		res, ok = spatial_grid_iterate(&it.point_it, ignore_visited)
 	}
 
 	return res, ok
@@ -415,10 +430,11 @@ Spatial_Grid_Line_Iterator :: struct($N: uint) {
 }
 
 __spatial_grid_line_iterator_rect_iterator :: proc(g: ^Spatial_Grid($N), pos: Vec2) -> Spatial_Grid_Rect_Iterator(N) {
-	return spatial_grid_rect_iterator(g, Rect{
+	rect_it := spatial_grid_rect_iterator(g, Rect{
 		pos - g.max_entity_radius,
 		2 * g.max_entity_radius
 	})
+	return rect_it
 }
 
 spatial_grid_line_iterator :: proc(g: ^Spatial_Grid($N), line: Line) -> Spatial_Grid_Line_Iterator(N) {
@@ -433,34 +449,45 @@ spatial_grid_line_iterator :: proc(g: ^Spatial_Grid($N), line: Line) -> Spatial_
 
 // NOTE: doesn't work when you're inserting new items. At least, I intentionally don't handle that case.
 spatial_grid_line_iterate :: proc(it: ^Spatial_Grid_Line_Iterator($N)) -> (^Spatial_Grid_Slot, bool)  {
-	slot, has_slot := spatial_grid_rect_iterate(&it.rect_it)
+	slot, has_slot := spatial_grid_rect_iterate(&it.rect_it, ignore_visited = true)
 
 	for !has_slot {
 		next_intersection_pos, ok := grid_line_intersection_iterate(&it.grid_it)
 		if ok {
 			it.rect_it = __spatial_grid_line_iterator_rect_iterator(it.g, next_intersection_pos)
-			slot, has_slot = spatial_grid_rect_iterate(&it.rect_it)
+			slot, has_slot = spatial_grid_rect_iterate(&it.rect_it, ignore_visited = true)
 		} else {
 			// No more grid slots. Let's go back over the points and clear the visited flag.
 			// This is more efficient than looping over every single grid item
-			grid_it := grid_line_intersection_iterator(it.start, it.end, it.grid_it.grid_size)
+			rect_it := __spatial_grid_line_iterator_rect_iterator(it.g, it.start)
+			for slot in spatial_grid_rect_iterate(&rect_it, ignore_visited = false) {
+				slot.item.visited = false;
+			}
+			grid_it := grid_line_intersection_iterator(it.start, it.end, it.g.grid_size)
 			for pos in grid_line_intersection_iterate(&grid_it) {
-				coord := spatial_grid_pos_to_coord(it.g, pos)
-				slot := spatial_grid_coord_to_firt_slot(it.g, coord)
-				if slot != nil {
-					slot.visited = false
+				rect_it := __spatial_grid_line_iterator_rect_iterator(it.g, pos)
+				for slot in spatial_grid_rect_iterate(&rect_it, ignore_visited = false) {
+					slot.item.visited = false;
 				}
+				// for x in rect_it.from.x..=rect_it.to.x {
+				// 	for y in rect_it.from.y..=rect_it.to.y {
+				// 		slot := spatial_grid_coord_to_first_slot(it.g, {x, y})
+				// 		if slot.grid_coord == {x, y} {
+				// 			slot.visited = false
+				// 		}
+				// 	}
+				// }
 			}
 			assert(has_slot == false)
+			for &item in it.g.items {
+				assert(item.visited == false)
+			}
 			break
 		}
 	}
 
 	if has_slot {
-		is_head := slot.prev == nil
-		if is_head {
-			slot.item.visited = true
-		}
+		slot.item.visited = true
 	}
 
 	return slot, has_slot
@@ -510,8 +537,6 @@ __spatial_grid_validate_slot :: proc(g: ^Spatial_Grid($N), slot: ^Spatial_Grid_S
 		}
 	}
 
-	// TODO: re-enable and fix
-	// assert(i.visited == false)
 	for slot != nil {
 		if slot.next != nil {
 			assert(slot.next.prev == slot)

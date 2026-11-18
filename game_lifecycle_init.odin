@@ -52,6 +52,8 @@ Game_State :: struct {
 	bullets: Item_Pool(Entity),
 	item_pools: [ItemType]^Item_Pool(Entity),
 
+	debug_lines: [dynamic; 100_000]Line,
+
 	mouse_delta, prev_mouse_pos : Vec2,
 
 	perf: struct {
@@ -133,8 +135,8 @@ init :: proc(state: ^Game_State) {
 		health = 100,
 	}
 
-	for i in 0..<1000 { // This is the goal
-	// for i in 0..<10 { // For testing purposes
+	// for i in 0..<1000 { // This is the goal
+	for i in 0..<10 { // For testing purposes
 		angle := rand.float32_range(-math.PI, math.PI)
 		pos := 1000 * Vec2{math.cos(angle), math.sin(angle)}
 		e := pool_add(&state.enemies, {
@@ -147,7 +149,8 @@ init :: proc(state: ^Game_State) {
 	}
 
 	cg: Circle_Generator
-	for pos in circle_generate(&cg, 40) {
+	// for pos in circle_generate(&cg, 40) {
+	for pos in circle_generate(&cg, 1) {
 		t := add_tower(state, pos * 50)
 		state.towers.items[t].shoot_cooldown_timer = rand.float32_range(0, state.towers.items[t].shoot_cooldown);
 	}

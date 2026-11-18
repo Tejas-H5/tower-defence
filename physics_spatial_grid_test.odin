@@ -18,7 +18,7 @@ expect_indices_at_pos :: proc(t: ^testing.T, g: ^Spatial_Grid($N), pos: Vec2, ex
 	count := 0
 
 	it := spatial_grid_iterator(g, pos)
-	for slot in spatial_grid_iterate(&it) {
+	for slot in spatial_grid_iterate(&it, ignore_visited = false) {
 		if (!testing.expect(t, count < len(expected_indices), "too many items present", loc=loc)) {return}
 
 		testing.expect_value(t, slot.handle - 1, expected_indices[count], loc)
@@ -155,8 +155,8 @@ test_spatial_grid_swap_positions_works_with_colliding_hash :: proc(t: ^testing.T
 	// Make sure our coordinates will collide
 	coord1 := Vec2{0, 0}
 	coord2 := Vec2{0, 50}
-	idx1 := __spatial_grid_coord_to_hash(spatial_grid_pos_to_coord(&grid,coord1)) % len(grid.items)
-	idx2 := __spatial_grid_coord_to_hash(spatial_grid_pos_to_coord(&grid,coord2)) % len(grid.items)
+	idx1 := __spatial_grid_coord_to_hash(pos_to_grid_coord(&grid,coord1)) % len(grid.items)
+	idx2 := __spatial_grid_coord_to_hash(pos_to_grid_coord(&grid,coord2)) % len(grid.items)
 	testing.expect_value(t, idx1, idx2)
 
 	test_spatial_grid_swap_positions_internal(t, coord1, coord2)
@@ -178,7 +178,7 @@ test_spatial_grid_iterate_rect :: proc(t: ^testing.T) {
 
 	count := 0
 	iter := spatial_grid_rect_iterator(&grid, Rect{{9, 9}, {2, 2}})
-	for e in spatial_grid_rect_iterate(&iter) {
+	for e in spatial_grid_rect_iterate(&iter, ignore_visited = false) {
 		count += 1
 	}
 

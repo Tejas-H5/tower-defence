@@ -83,23 +83,25 @@ update_game :: proc(game: ^Game_State, dt: f32) {
 						num_iterations += 1
 						enemy_pool := cast(^Item_Pool(Entity))slot.pool
 						if enemy_pool == &game.enemies {
+
 							j := slot.handle - 1
+
 							other_rect := get_rect(&state.enemies, j)
+
+							// Debug 
+							{
+								append(&game.debug_lines, {
+									ray.end,
+									other_rect.pos,
+								})
+							}
+
 							res := line_intersects_rect(ray, other_rect)
 							if res.num_hits > 0 {
 								set_entity_position(game, pool, i, res.hits[0].pos)
 							}
 						}
 					}
-
-
-					// for i in 0 ..< state.enemies.count {
-					// 	other_rect := get_rect(&state.enemies, i)
-					// 	res := line_intersects_rect(ray, other_rect)
-					// 	if res.num_hits > 0 {
-					// 		set_entity_position(state, pool, i, res.hits[0].pos)
-					// 	}
-					// }
 				}
 			}
 		}
@@ -182,6 +184,10 @@ update_game :: proc(game: ^Game_State, dt: f32) {
 				if pool.items[i].health <= 0 || pool.items[i].lifetime_timer < 0 {
 					spatial_grid_remove(&game.spatial_grid, &pool.items[i].spatial_grid_handle)
 					pool_unordered_remove(pool, i)
+					if i != pool.count {
+						pool.items[i].spatial_grid_handle.slot.handle = i + 1
+					}
+
 					i -= 1
 				}
 			}
