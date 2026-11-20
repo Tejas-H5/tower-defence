@@ -112,21 +112,6 @@ set_mouse_cursor :: proc(type: CursorType) {
 	wanted_cursor = type
 }
 
-get_delta_time :: proc() -> f32 {
-	return rl.GetFrameTime()
-}
-
-get_time :: proc() -> f64 {
-	return rl.GetTime()
-}
-
-update_timer :: proc(t: ^f64) -> f64 {
-	t1 := get_time()
-	result := t1 - t^
-	t^ = t1
-	return result
-}
-
 IS_DEVELOPMENT_BUILD :: true
 
 // These asserts are safe to turn off in prod, I am probably being paranoid putting them in

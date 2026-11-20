@@ -57,11 +57,12 @@ update_game :: proc(game: ^Game_State, dt: f32) {
 			game.player.items[0].position_prev = game.player.items[0]._position
 		}
 	}
-	game.perf.input += update_timer(&t)
+	game.perf.input.t += update_timer(&t)
 
 	// Step world physics
 	{
-		num_iterations := 0
+		t2 := t
+
 		for pool in game.item_pools {
 			is_bullets_pool := pool == &game.bullets
 
@@ -70,37 +71,39 @@ update_game :: proc(game: ^Game_State, dt: f32) {
 				advance_timer(&pool.items.shoot_cooldown_timer[i], dt)
 				pool.items.position_prev[i] = pool.items._position[i]
 				set_entity_position(game, pool, i, pool.items[i]._position + dt * pool.items.velocity[i])
+			}
+		}
+		game.perf.physics_integration.t += update_timer(&t2)
 
-				if is_bullets_pool {
-					bullet := pool.items[i]
-					// Bullets get to damage enemies.
-					// Oh shit maybe this is the slow bit ...
-					// but this is far easier to speed up with a spatial hash than the 'closest enemy' thing the towers do.
+		// bullets
+		{
+			num_iterations := 0
+			pool := &game.bullets
+			for i in 0 ..< pool.count {
+				bullet := pool.items[i]
+				// Bullets get to damage enemies.
+				bullet_ray := Line{bullet.position_prev, bullet._position}
 
-					bullet_ray := Line{bullet.position_prev, bullet._position}
+				it := spatial_grid_line_iterator(&game.spatial_grid, bullet_ray)
+				for slot in spatial_grid_line_iterate(&it) {
+					num_iterations += 1
+					enemy_pool := cast(^Item_Pool(Entity))slot.pool
+					if enemy_pool == &game.enemies {
+						j := slot.handle - 1
 
-
-					it := spatial_grid_line_iterator(&game.spatial_grid, bullet_ray)
-					for slot in spatial_grid_line_iterate(&it) {
-						num_iterations += 1
-						enemy_pool := cast(^Item_Pool(Entity))slot.pool
-						if enemy_pool == &game.enemies {
-
-							j := slot.handle - 1
-
-							other_rect := get_rect(&state.enemies, j)
-							res := line_intersects_rect(bullet_ray, other_rect)
-							if res.num_hits > 0 {
-								set_entity_position(game, pool, i, res.hits[0].pos)
-							}
+						other_rect := get_rect(&state.enemies, j)
+						res := line_intersects_rect(bullet_ray, other_rect)
+						if res.num_hits > 0 {
+							set_entity_position(game, pool, i, res.hits[0].pos)
 						}
 					}
 				}
 			}
+			log("num iterations: ", num_iterations)
+			game.perf.physics_bullet_line_queries.t += update_timer(&t2)
 		}
-		log("num iterations: ", num_iterations)
 	}
-	game.perf.physics += update_timer(&t)
+	game.perf.physics.t += update_timer(&t)
 
 	// Figure out what just happened, action it
 	{
@@ -162,7 +165,7 @@ update_game :: proc(game: ^Game_State, dt: f32) {
 			}
 		}
 	}
-	game.perf.ai += update_timer(&t)
+	game.perf.ai.t += update_timer(&t)
 
 	// Clean up dead entities, add new entities
 	{
@@ -186,6 +189,6 @@ update_game :: proc(game: ^Game_State, dt: f32) {
 			}
 		}
 	}
-	game.perf.apply_phase += update_timer(&t)
+	game.perf.apply_phase.t += update_timer(&t)
 }
 

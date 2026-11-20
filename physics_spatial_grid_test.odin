@@ -18,7 +18,7 @@ expect_indices_at_pos :: proc(t: ^testing.T, g: ^Spatial_Grid($N), pos: Vec2, ex
 	count := 0
 
 	it := spatial_grid_iterator(g, pos)
-	for slot in spatial_grid_iterate(&it, ignore_visited = false) {
+	for slot in spatial_grid_iterate(&it) {
 		if (!testing.expect(t, count < len(expected_indices), "too many items present", loc=loc)) {return}
 
 		testing.expect_value(t, slot.handle - 1, expected_indices[count], loc)
@@ -178,7 +178,7 @@ test_spatial_grid_iterate_rect :: proc(t: ^testing.T) {
 
 	count := 0
 	iter := spatial_grid_rect_iterator(&grid, Rect{{9, 9}, {2, 2}})
-	for e in spatial_grid_rect_iterate(&iter, ignore_visited = false) {
+	for e in spatial_grid_rect_iterate(&iter) {
 		count += 1
 	}
 

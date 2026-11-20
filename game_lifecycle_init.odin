@@ -6,6 +6,8 @@ import "core:math/rand"
 import "core:container/handle_map"
 import "core:mem"
 
+IS_TEST_SCENARIO :: false
+
 CAMERA_MOVE_SPEED :: 2.5
 CAMERA_MOVE_SPEED_SLOW :: 0.5
 CAMERA_MOVE_SPEED_SENSITIVITY :: 30
@@ -56,9 +58,16 @@ Game_State :: struct {
 
 	mouse_delta, prev_mouse_pos : Vec2,
 
-	perf: struct {
-		input, physics, ai, apply_phase: f64,
-	},
+	perf: Perf, 
+}
+
+Perf :: struct {
+	input:                       NamedTimer,
+	physics:                     NamedTimer,
+	physics_integration:         NamedTimer,
+	physics_bullet_line_queries: NamedTimer,
+	ai:                          NamedTimer,
+	apply_phase:                 NamedTimer,
 }
 
 ItemType :: enum {
@@ -105,6 +114,13 @@ init :: proc(state: ^Game_State) {
 		size = 1000,
 	}
 
+	state.perf.input.name                       = "input";
+	state.perf.physics.name                     = "physics";
+	state.perf.physics_integration.name         = "physics_integration";
+	state.perf.physics_bullet_line_queries.name = "physics_bullet_line_queries";
+	state.perf.ai.name                          = "ai";
+	state.perf.apply_phase.name                 = "apply_phase";
+
 	state.spatial_grid.grid_size = 200
 
 	state.player  = memory_to_pool(&state.player_memory)
@@ -135,22 +151,21 @@ init :: proc(state: ^Game_State) {
 		health = 100,
 	}
 
-	// for i in 0..<1000 { // This is the goal
-	for i in 0..<100 { // For testing purposes
+	n := IS_TEST_SCENARIO ? 100 : 10000
+	for i in 0..<n {
 		angle := rand.float32_range(-math.PI, math.PI)
 		pos := 1000 * Vec2{math.cos(angle), math.sin(angle)}
 		e := pool_add(&state.enemies, {
 			size          = 10,
 			health        = 100,
-			move_speed    = 0, // 30 * rand.float32_range(1, 2),
+			move_speed    = IS_TEST_SCENARIO ? 0: 30 * rand.float32_range(1, 2),
 			color         = {255, 0, 0, 255},
 		})
 		set_entity_position(state, &state.enemies, e, pos)
 	}
 
 	cg: Circle_Generator
-	// for pos in circle_generate(&cg, 40) {
-	for pos in circle_generate(&cg, 2) {
+	for pos in circle_generate(&cg, IS_TEST_SCENARIO ? 1 : 50) {
 		t := add_tower(state, pos * 50)
 		state.towers.items[t].shoot_cooldown_timer = rand.float32_range(0, state.towers.items[t].shoot_cooldown);
 	}

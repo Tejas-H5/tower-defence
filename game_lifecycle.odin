@@ -17,13 +17,13 @@ advance_timer :: proc(val: ^f32, dt: f32) {
 }
 
 add_tower :: proc(state: ^Game_State, position: Vec2) -> int {
+	cooldown := f32(IS_TEST_SCENARIO ? 1 : 0.1)
 	t := pool_add(&state.towers, {
-		color = COLOR_PLAYER,
-		health = 100,
-		size = 10,
-		shoot_cooldown = 1, 
-		// shoot_cooldown = 0.1, 
-		shoot_cooldown_timer = 1,
+		color                = COLOR_PLAYER,
+		health               = 100,
+		size                 = 10,
+		shoot_cooldown       = cooldown,
+		shoot_cooldown_timer = rand.float32_range(0, cooldown),
 	})
 	set_entity_position(state, &state.towers, t, position)
 	return t

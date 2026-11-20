@@ -65,10 +65,6 @@ render_game :: proc(game: ^Game_State) {
 								count += 1
 								handle = handle.next
 							}
-
-							if slot.visited {
-								outline_color.g = 255
-							}
 						}
 
 						heat := f32(count) / f32(game.spatial_grid.count)
@@ -135,22 +131,18 @@ render_game :: proc(game: ^Game_State) {
 			debug_text_entry(&debug_text_pos, "%v bullets", game.bullets.count);
 			debug_text_entry(&debug_text_pos, "%v spatial grid", game.spatial_grid.count);
 
-			warn_abt_perf :: proc(val: f64, subsystem: string) -> f64 {
-				if val < 30 {
-					log(subsystem, "was slow!!!")
-				}
-				return val
+			log_timer :: proc(debug_text_pos: ^Vec2, timer: ^NamedTimer) {
+				fps := min(1 / timer.t, 120)
+				debug_text_entry(debug_text_pos, "%.3f %v", fps, timer.name)
+				timer.t = 0
 			}
 
-			debug_text_entry(&debug_text_pos, "%.3f input", warn_abt_perf(min(1 / game.perf.input, 120), "input"))
-			game.perf.input = 0
-			debug_text_entry(&debug_text_pos, "%.3f physics", warn_abt_perf(min(1 / game.perf.physics, 120), "physics"))
-			game.perf.physics = 0
-			debug_text_entry(&debug_text_pos, "%.3f ai", warn_abt_perf(min(1 / game.perf.ai, 120), "ai"))
-			game.perf.ai = 0
-			debug_text_entry(&debug_text_pos, "%.3f apply_phase", warn_abt_perf(min(1 / game.perf.apply_phase, 120), "apply_phase"))
-			game.perf.apply_phase = 0
-
+			log_timer(&debug_text_pos, &game.perf.input)
+			// log_timer(&debug_text_pos, &game.perf.physics)
+			log_timer(&debug_text_pos, &game.perf.physics_integration)
+			log_timer(&debug_text_pos, &game.perf.physics_bullet_line_queries)
+			log_timer(&debug_text_pos, &game.perf.ai)
+			log_timer(&debug_text_pos, &game.perf.apply_phase)
 
 			if false {
 				grid := &game.spatial_grid

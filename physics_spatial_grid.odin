@@ -356,15 +356,10 @@ spatial_grid_iterator_from_coords :: proc(g: ^Spatial_Grid($N), coord: Grid_Coor
 	return Spatial_Grid_Iterator{slot = slot}
 }
 
-spatial_grid_iterate :: proc(it: ^Spatial_Grid_Iterator, ignore_visited: bool) -> (^Spatial_Grid_Slot, bool) {
+// TODO: remove ignore_visited param
+spatial_grid_iterate :: proc(it: ^Spatial_Grid_Iterator) -> (^Spatial_Grid_Slot, bool) {
 	if it.slot == nil {
 		return nil, false
-	}
-
-	if ignore_visited {
-		if it.slot.item.visited {
-			return nil, false
-		}
 	}
 
 	this_slot := it.slot
@@ -402,9 +397,11 @@ spatial_grid_rect_iterator :: proc(g: ^Spatial_Grid($N), rect: Rect) -> Spatial_
 }
 
 // Iterates all rectangles that intersect with this one.
-spatial_grid_rect_iterate :: proc(it: ^Spatial_Grid_Rect_Iterator($N), ignore_visited: bool) -> (^Spatial_Grid_Slot, bool) {
-	res, ok := spatial_grid_iterate(&it.point_it, ignore_visited)
-	for !ok { 
+spatial_grid_rect_iterate :: proc(it: ^Spatial_Grid_Rect_Iterator($N)) -> (res: ^Spatial_Grid_Slot, ok:  bool) {
+	for { 
+		res, ok = spatial_grid_iterate(&it.point_it)
+		if ok {break}
+
 		it.pos += { 1, 0 }
 		if it.pos.x > it.to.x {
 			it.pos = { it.from.x, it.pos.y + 1 }
@@ -413,14 +410,13 @@ spatial_grid_rect_iterate :: proc(it: ^Spatial_Grid_Rect_Iterator($N), ignore_vi
 			break
 		}
 		it.point_it = spatial_grid_iterator_from_coords(it.g, it.pos)
-		res, ok = spatial_grid_iterate(&it.point_it, ignore_visited)
 	}
-
-	return res, ok
+	return
 }
 
 Spatial_Grid_Line_Iterator :: struct($N: uint) {
 	g: ^Spatial_Grid(N),
+	current_item: ^Spatial_Grid_Item,
 	start, end: Vec2,
 	// The line will have a thickness. A line passing very close but not intersecting
 	// a grid square may also be colliding with something in that other grid square.
@@ -448,46 +444,52 @@ spatial_grid_line_iterator :: proc(g: ^Spatial_Grid($N), line: Line) -> Spatial_
 }
 
 // NOTE: doesn't work when you're inserting new items. At least, I intentionally don't handle that case.
-spatial_grid_line_iterate :: proc(it: ^Spatial_Grid_Line_Iterator($N)) -> (^Spatial_Grid_Slot, bool)  {
-	slot, has_slot := spatial_grid_rect_iterate(&it.rect_it, ignore_visited = true)
+spatial_grid_line_iterate :: proc(it: ^Spatial_Grid_Line_Iterator($N)) -> (slot: ^Spatial_Grid_Slot, has_slot: bool)  {
+	for {
+		slot, has_slot = spatial_grid_rect_iterate(&it.rect_it)
+		if has_slot {
+			if slot.item.visited {
+				continue
+			}
 
-	for !has_slot {
+			it.current_item = slot.item
+			return
+		}
+
+		if it.current_item != nil {
+			it.current_item.visited = true
+			it.current_item = nil
+		}
+
 		next_intersection_pos, ok := grid_line_intersection_iterate(&it.grid_it)
 		if ok {
 			it.rect_it = __spatial_grid_line_iterator_rect_iterator(it.g, next_intersection_pos)
-			slot, has_slot = spatial_grid_rect_iterate(&it.rect_it, ignore_visited = true)
-		} else {
-			// No more grid slots. Let's go back over the points and clear the visited flag.
-			// This is more efficient than looping over every single grid item
-			rect_it := __spatial_grid_line_iterator_rect_iterator(it.g, it.start)
-			for slot in spatial_grid_rect_iterate(&rect_it, ignore_visited = false) {
+			continue
+		} 
+
+		// No more grid slots, iteration is over here.
+		// Let's go back over the points and clear the visited flag.
+		// This is more efficient than looping over every single grid item
+		rect_it := __spatial_grid_line_iterator_rect_iterator(it.g, it.start)
+		for slot in spatial_grid_rect_iterate(&rect_it) {
+			slot.item.visited = false;
+		}
+		grid_it := grid_line_intersection_iterator(it.start, it.end, it.g.grid_size)
+		for pos in grid_line_intersection_iterate(&grid_it) {
+			rect_it := __spatial_grid_line_iterator_rect_iterator(it.g, pos)
+			for slot in spatial_grid_rect_iterate(&rect_it) {
 				slot.item.visited = false;
 			}
-			grid_it := grid_line_intersection_iterator(it.start, it.end, it.g.grid_size)
-			for pos in grid_line_intersection_iterate(&grid_it) {
-				rect_it := __spatial_grid_line_iterator_rect_iterator(it.g, pos)
-				for slot in spatial_grid_rect_iterate(&rect_it, ignore_visited = false) {
-					slot.item.visited = false;
-				}
-				// for x in rect_it.from.x..=rect_it.to.x {
-				// 	for y in rect_it.from.y..=rect_it.to.y {
-				// 		slot := spatial_grid_coord_to_first_slot(it.g, {x, y})
-				// 		if slot.grid_coord == {x, y} {
-				// 			slot.visited = false
-				// 		}
-				// 	}
-				// }
-			}
+		}
+
+		if IS_TEST_SCENARIO {
 			assert(has_slot == false)
 			for &item in it.g.items {
 				assert(item.visited == false)
 			}
-			break
 		}
-	}
 
-	if has_slot {
-		slot.item.visited = true
+		break
 	}
 
 	return slot, has_slot
