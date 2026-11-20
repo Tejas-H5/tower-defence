@@ -72,13 +72,15 @@ update_game :: proc(game: ^Game_State, dt: f32) {
 				set_entity_position(game, pool, i, pool.items[i]._position + dt * pool.items.velocity[i])
 
 				if is_bullets_pool {
+					bullet := pool.items[i]
 					// Bullets get to damage enemies.
 					// Oh shit maybe this is the slow bit ...
 					// but this is far easier to speed up with a spatial hash than the 'closest enemy' thing the towers do.
-					ray := Line{pool.items[i].position_prev, pool.items[i]._position}
+
+					bullet_ray := Line{bullet.position_prev, bullet._position}
 
 
-					it := spatial_grid_line_iterator(&game.spatial_grid, ray)
+					it := spatial_grid_line_iterator(&game.spatial_grid, bullet_ray)
 					for slot in spatial_grid_line_iterate(&it) {
 						num_iterations += 1
 						enemy_pool := cast(^Item_Pool(Entity))slot.pool
@@ -87,16 +89,7 @@ update_game :: proc(game: ^Game_State, dt: f32) {
 							j := slot.handle - 1
 
 							other_rect := get_rect(&state.enemies, j)
-
-							// Debug 
-							{
-								append(&game.debug_lines, {
-									ray.end,
-									other_rect.pos,
-								})
-							}
-
-							res := line_intersects_rect(ray, other_rect)
+							res := line_intersects_rect(bullet_ray, other_rect)
 							if res.num_hits > 0 {
 								set_entity_position(game, pool, i, res.hits[0].pos)
 							}

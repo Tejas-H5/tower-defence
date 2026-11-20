@@ -21,7 +21,9 @@ add_tower :: proc(state: ^Game_State, position: Vec2) -> int {
 		color = COLOR_PLAYER,
 		health = 100,
 		size = 10,
-		shoot_cooldown = 1, shoot_cooldown_timer = 1,
+		shoot_cooldown = 1, 
+		// shoot_cooldown = 0.1, 
+		shoot_cooldown_timer = 1,
 	})
 	set_entity_position(state, &state.towers, t, position)
 	return t

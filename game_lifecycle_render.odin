@@ -13,8 +13,8 @@ render_game :: proc(game: ^Game_State) {
 	// Plot twist: the render function owns physics update ??
 	// Maybe consider multithreading later but how do u make it deterministic? not sure.
 	{
-		PHYSICS_TIMESTEP :: 0.02
-		MAX_PHYSICS_TO_CATCH_UP_ON :: 5 * PHYSICS_TIMESTEP
+		PHYSICS_TIMESTEP           :: 0.02
+		MAX_PHYSICS_TO_CATCH_UP_ON :: PHYSICS_TIMESTEP
 
 		// We would implement slow motion / pausing here.
 		game.physics_to_catch_up_on += get_delta_time()
@@ -90,15 +90,7 @@ render_game :: proc(game: ^Game_State) {
 					) 
 				}
 			}
-
-			// Handles
-			{
-				for i in 1..<game.enemies.count {
-					draw_line_world(game, {game.enemies.items[i - 1]._position, game.enemies.items[i]._position}, 10, {0, 0, 0, 255})
-				}
-			}
 		}
-
 
 		for pool in game.item_pools {
 			for i in 0..<pool.count {

@@ -39,15 +39,17 @@ run_interactive_test :: proc() {
 
 		draw_line(start, end, 3, Color{0, 0, 0, 255})
 		
-		it := grid_line_intersection_iterator(start, end, GRID_SPACING)
+		
 		safety := 0
-		for pos in grid_line_intersection_iterate(&it) {
+		for it := grid_line_intersection_iterator(start, end, GRID_SPACING); it.t < it.length; {
+			defer grid_line_intersection_iterate(&it)
+
 			safety += 1
 			if safety > 2000 {
 				log("NAHH")
 				break
 			}
-			draw_marker(pos, 5, Color{0, 0,0, 50})
+			draw_marker(it.pos, 5, Color{0, 0,0, 50})
 		}
 	}
 

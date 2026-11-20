@@ -136,13 +136,13 @@ init :: proc(state: ^Game_State) {
 	}
 
 	// for i in 0..<1000 { // This is the goal
-	for i in 0..<10 { // For testing purposes
+	for i in 0..<100 { // For testing purposes
 		angle := rand.float32_range(-math.PI, math.PI)
 		pos := 1000 * Vec2{math.cos(angle), math.sin(angle)}
 		e := pool_add(&state.enemies, {
 			size          = 10,
 			health        = 100,
-			move_speed    = 30 * rand.float32_range(1, 2),
+			move_speed    = 0, // 30 * rand.float32_range(1, 2),
 			color         = {255, 0, 0, 255},
 		})
 		set_entity_position(state, &state.enemies, e, pos)
@@ -150,7 +150,7 @@ init :: proc(state: ^Game_State) {
 
 	cg: Circle_Generator
 	// for pos in circle_generate(&cg, 40) {
-	for pos in circle_generate(&cg, 1) {
+	for pos in circle_generate(&cg, 2) {
 		t := add_tower(state, pos * 50)
 		state.towers.items[t].shoot_cooldown_timer = rand.float32_range(0, state.towers.items[t].shoot_cooldown);
 	}
