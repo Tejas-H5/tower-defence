@@ -3,11 +3,12 @@ package main
 import "core:math"
 import "core:math/linalg"
 import "core:math/rand"
+import pq "core:container/priority_queue"
 
-update_game :: proc(game: ^Game_State, dt: f32) {
+update_game :: proc(game_state: ^Game_State, dt: f32) {
 	mouse_pos := get_mouse_pos()
-	defer game.prev_mouse_pos = mouse_pos
-	game.mouse_delta = mouse_pos - game.prev_mouse_pos
+	defer game_state.prev_mouse_pos = mouse_pos
+	game_state.mouse_delta = mouse_pos - game_state.prev_mouse_pos
 
 	// Get user input
 	t := get_time()
@@ -21,164 +22,183 @@ update_game :: proc(game: ^Game_State, dt: f32) {
 					dir := get_move_input_held()
 					move_speed: f32 =
 						get_slow_movement_input_held() ? CAMERA_MOVE_SPEED_SLOW : CAMERA_MOVE_SPEED
-					pos_vel_target := game.view.size * dir * move_speed
+					pos_vel_target := game_state.view.size * dir * move_speed
 					size_vel_target :=
-						game.view.size * get_z_axis_input_held() * CAMERA_ZOOM_SPEED
-					game.view.pos_vel = linalg.lerp(
-						game.view.pos_vel,
+						game_state.view.size * get_z_axis_input_held() * CAMERA_ZOOM_SPEED
+					game_state.view.pos_vel = linalg.lerp(
+						game_state.view.pos_vel,
 						pos_vel_target,
 						dt * CAMERA_MOVE_SPEED_SENSITIVITY,
 					)
-					game.view.size_vel = linalg.lerp(
-						game.view.size_vel,
+					game_state.view.size_vel = linalg.lerp(
+						game_state.view.size_vel,
 						size_vel_target,
 						dt * CAMERA_ZOOM_SPEED_SENSITIVITY,
 					)
-					game.view.pos += game.view.pos_vel * dt
-					game.view.size += game.view.size_vel * dt
+					game_state.view.pos += game_state.view.pos_vel * dt
+					game_state.view.size += game_state.view.size_vel * dt
 				}
 
 				// Drag movement
 				{
 					if cursor_is_held() {
-						delta := screen_size_to_world_size(game.view, game.mouse_delta)
-						game.view.pos -= delta
+						delta := screen_size_to_world_size(game_state.view, game_state.mouse_delta)
+						game_state.view.pos -= delta
 					}
 				}
 
 				BOUNDS :: 10_000
-				game.view.pos.x = clamp(game.view.pos.x, -BOUNDS, BOUNDS)
-				game.view.pos.y = clamp(game.view.pos.y, -BOUNDS, BOUNDS)
-				game.view.size = clamp(game.view.size, 100, 10000)
+				game_state.view.pos.x = clamp(game_state.view.pos.x, -BOUNDS, BOUNDS)
+				game_state.view.pos.y = clamp(game_state.view.pos.y, -BOUNDS, BOUNDS)
+				game_state.view.size = clamp(game_state.view.size, 100, 10000)
 			}
 
-			set_entity_position(game, &game.player, 0, game.view.pos)
+			set_entity_position(game_state, &game_state.player, 0, game_state.view.pos)
 			// intentional - we want a teleport and not a move
-			game.player.items[0].position_prev = game.player.items[0]._position
+			game_state.player.items[0].position_prev = game_state.player.items[0].position
 		}
 	}
-	game.perf.input.t += update_timer(&t)
+	game_state.perf.input.t += update_timer(&t)
 
 	// Step world physics
 	{
 		t2 := t
 
-		for pool in game.item_pools {
-			is_bullets_pool := pool == &game.bullets
+		for pool in game_state.item_pools {
+			is_bullets_pool := pool == &game_state.bullets
 
-			for i in 0 ..< pool.count {
-				advance_timer(&pool.items.lifetime_timer[i], dt)
-				advance_timer(&pool.items.shoot_cooldown_timer[i], dt)
-				pool.items.position_prev[i] = pool.items._position[i]
-				set_entity_position(game, pool, i, pool.items[i]._position + dt * pool.items.velocity[i])
+			for &item, item_idx in pool_items(pool) {
+				advance_timer(&item.lifetime_timer, dt)
+				advance_timer(&item.shoot_cooldown_timer, dt)
+				item.position_prev = item.position
+				set_entity_position(game_state, pool, item_idx, item.position + dt * item.velocity)
 			}
 		}
-		game.perf.physics_integration.t += update_timer(&t2)
+		game_state.perf.physics_integration.t += update_timer(&t2)
 
 		// bullets
+		// TODO: maybe we want this for everything?
+		// TODO: generic collisions?
 		{
 			num_iterations := 0
-			pool := &game.bullets
-			for i in 0 ..< pool.count {
-				bullet := pool.items[i]
-				// Bullets get to damage enemies.
-				bullet_ray := Line{bullet.position_prev, bullet._position}
+			for &bullet, bullet_idx in pool_items(&game_state.bullets) {
+				bullet_ray := Line{bullet.position_prev, bullet.position}
 
-				it := spatial_grid_line_iterator(&game.spatial_grid, bullet_ray)
+				// For every enemy that intersects with the bullet's movenent ray, 
+				// we want to move the bullet back to the closest enemy.
+				// TODO: piercing bullets that can move through multiple enemies?
+				it := spatial_grid_line_iterator(&game_state.enemies.spatial_grid, bullet_ray)
 				for slot in spatial_grid_line_iterate(&it) {
 					num_iterations += 1
-					enemy_pool := cast(^Item_Pool(Entity))slot.pool
-					if enemy_pool == &game.enemies {
-						j := slot.handle - 1
-
-						other_rect := get_rect(&state.enemies, j)
+					enemy, ok := get_entity_for_slot(slot, &game_state.enemies)
+					if ok {
+						other_rect := get_rect(enemy)
 						res := line_intersects_rect(bullet_ray, other_rect)
 						if res.num_hits > 0 {
-							set_entity_position(game, pool, i, res.hits[0].pos)
+							set_entity_position(game_state, &game_state.bullets, bullet_idx, res.hits[0].pos)
 						}
 					}
 				}
 			}
 			log("num iterations: ", num_iterations)
-			game.perf.physics_bullet_line_queries.t += update_timer(&t2)
+			game_state.perf.physics_bullet_line_queries.t += update_timer(&t2)
 		}
 	}
-	game.perf.physics.t += update_timer(&t)
+	game_state.perf.physics.t += update_timer(&t)
 
 	// Figure out what just happened, action it
 	{
-		for pool in game.item_pools {
-			is_bullets_pool := pool == &game.bullets
-			is_tower_pool := pool == &game.towers
-			is_enemy_pool := pool == &game.enemies
+		t2 := t
 
-			for i in 0 ..< pool.count {
-				if !pool.items[i].added_before_this_frame {continue}
+		pq.clear(&game_state.closest_to_base)
+		for enemy, enemy_idx in pool_items(&game_state.enemies) {
+			closest_distance: f32 = -1
+			for base in pool_items(&game_state.bases) {
+				distance := linalg.length(base.position - enemy.position)
+				if closest_distance < 0 || distance < closest_distance {
+					closest_distance = distance
+				}
+			}
+			if closest_distance > 0 {
+				pq.push(&game_state.closest_to_base, {enemy_idx, closest_distance})
+			}
+			if pq.len(game_state.closest_to_base) == game_state.towers.count {
+				break;
+			}
+		}
+		game_state.perf.ai_prioritisation.t += update_timer(&t2)
 
-				if is_tower_pool {
-					if pool.items[i].shoot_cooldown_timer < 0 {
-						pool.items[i].shoot_cooldown_timer = pool.items[i].shoot_cooldown
+		for &tower, tower_idx in pool_items(&game_state.towers) {
+			// NOTE: we will want more intelligent allocation of targets to towers later.
 
+			if tower.shoot_cooldown_timer < 0 {
+				tower.shoot_cooldown_timer = tower.shoot_cooldown
 
-						MAX_RANGE :: 10_000
-						// TODO: optimize this query somehow.
-						pos := pool.items[i]._position
-						target, ok := closest_entity_SLOWWW(&game.enemies, pos, MAX_RANGE)
-						if ok {
-							BULLET_SPEED :: 10_000
-							velocity := 
-								BULLET_SPEED * 
-								linalg.normalize0(game.enemies.items[target]._position - pos)
-							h := add_bullet(game, pos, velocity)
-						}
-					}
-				} else if is_enemy_pool {
-					pool.items[i].velocity =
-						pool.items[i].move_speed *
-						linalg.normalize0(game.bases.items[0]._position - pool.items[i]._position)
+				targets_queue := &game_state.closest_to_base.queue
+				if len(targets_queue) > 0 {
+					target       := targets_queue[tower_idx % len(targets_queue)]
+					target_enemy := &game_state.enemies.items[target.idx]
 
-					if rect_intersects_rect(get_rect(&game.bases, 0), get_rect(pool, i)) {
-						game.bases.items[0].health -= 1
-						kill_entity(game, pool, i);
-					}
-				} else if is_bullets_pool {
-					rect := get_rect(pool, i)
-					bullet_health := pool.items[i].health
-
-					bullet_hit := false
-					for i in 0 ..< game.enemies.count {
-						enemy_rect := get_rect(&game.enemies, i)
-
-						// Raycasting already happened during the physics update. We only
-						// need to check intersecting. TODO: if the raycast already detected the collision maybe we dont even need to do this!
-						if rect_intersects_rect(rect, enemy_rect) {
-							game.enemies.items[i].health -= bullet_health
-							bullet_hit = true
-							break
-						}
-					}
-
-					if bullet_hit {
-						kill_entity(game, pool, i)
-					}
+					BULLET_SPEED :: 10_000
+					velocity := BULLET_SPEED * linalg.normalize0(target_enemy.position - tower.position)
+					add_bullet(game_state, tower.position, velocity)
 				}
 			}
 		}
+
+		for &enemy in pool_items(&game_state.enemies) {
+			enemy.velocity =
+				enemy.move_speed *
+				linalg.normalize0(game_state.bases.items[0].position - enemy.position)
+
+			for &base in pool_items(&game_state.bases) {
+				if rect_intersects_rect(get_rect(&base), get_rect(&enemy)) {
+					game_state.bases.items[0].health -= 1
+					kill_entity(&enemy)
+				}
+			}
+		}
+
+		for &bullet in pool_items(&game_state.bullets) {
+			rect := get_rect(&bullet)
+			bullet_health := bullet.health
+
+			bullet_hit := false
+
+			rect_it := spatial_grid_rect_iterator(&game_state.enemies.spatial_grid, rect)
+			for slot in spatial_grid_rect_iterate(&rect_it) {
+				enemy, ok := get_entity_for_slot(slot, &game_state.enemies)
+				if ok {
+					enemy_rect := get_rect(enemy)
+					// Raycasting already happened during the physics update. We only
+					// need to check intersecting. TODO: if the raycast already detected the collision maybe we dont even need to do this!
+					if rect_intersects_rect(rect, enemy_rect) {
+						enemy.health -= bullet_health
+						bullet_hit = true
+						break
+					}
+				}
+			}
+
+			if bullet_hit {
+				kill_entity(&bullet)
+			}
+		}
 	}
-	game.perf.ai.t += update_timer(&t)
+	game_state.perf.ai.t += update_timer(&t)
 
 	// Clean up dead entities, add new entities
 	{
-		for pool in game.item_pools {
+		for pool in game_state.item_pools {
 			for i := 0; i < pool.count; i += 1 {
 				// Enable entities at the end, for correctness
 				pool.items[i].added_before_this_frame = true
 
-				if pool == &game.player {continue}
-				if pool == &game.bases {continue}
+				if pool == &game_state.player {continue}
+				if pool == &game_state.bases {continue}
 
 				if pool.items[i].health <= 0 || pool.items[i].lifetime_timer < 0 {
-					spatial_grid_remove(&game.spatial_grid, &pool.items[i].spatial_grid_handle)
+					spatial_grid_remove(&pool.spatial_grid, &pool.items[i].spatial_grid_handle)
 					pool_unordered_remove(pool, i)
 					if i != pool.count {
 						pool.items[i].spatial_grid_handle.slot.handle = i + 1
@@ -189,6 +209,14 @@ update_game :: proc(game: ^Game_State, dt: f32) {
 			}
 		}
 	}
-	game.perf.apply_phase.t += update_timer(&t)
+	game_state.perf.apply_phase.t += update_timer(&t)
 }
+
+get_entity_for_slot :: proc(slot: ^Spatial_Grid_Slot, expected_pool: ^Item_Pool(Entity)) -> (item: EntitySoaPtr, ok: bool) {
+	pool := cast(^Item_Pool(Entity))slot.pool
+	if pool != expected_pool {return nil, false}
+
+	return pool_get(expected_pool, slot.handle - 1), true
+}
+
 
