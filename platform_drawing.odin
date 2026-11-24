@@ -3,6 +3,7 @@ package main
 import "core:c"
 import "core:fmt"
 import "core:math"
+import "core:math/linalg"
 import rl "vendor:raylib"
 
 DrawableText :: struct {

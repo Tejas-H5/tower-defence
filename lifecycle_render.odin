@@ -2,7 +2,6 @@ package main
 
 import "core:math"
 import "core:math/linalg"
-import "core:math/rand"
 
 render_game :: proc(game_state: ^Game_State) {
 	set_mouse_cursor(.None)
@@ -33,11 +32,10 @@ render_game :: proc(game_state: ^Game_State) {
 		}
 	}
 
-
+	t := get_time()
 	// World
 	{
 		draw_bg(COLOR_WORLD_BG)
-
 
 		// Debug world things
 		{
@@ -76,7 +74,7 @@ render_game :: proc(game_state: ^Game_State) {
 
 			// Physics grid
 			{
-				draw_spatial_grid(game_state, &state.enemies.spatial_grid)
+				// draw_spatial_grid(game_state, &state.enemies.spatial_grid)
 			}
 
 			// World debug lines
@@ -100,8 +98,11 @@ render_game :: proc(game_state: ^Game_State) {
 				color.a = u8(255 * math.lerp(f32(0.1), 1, math.saturate(item.health / 100)))
 				draw_rect_world(game_state, enemies_rect, color)
 
-				thickness := item.size / 2
-				draw_line_world(game_state, {item.position_prev, item.position}, thickness, color);
+				dist := linalg.length(item.position_prev - item.position)
+				if dist > item.size {
+					thickness := item.size / 2
+					draw_line_world(game_state, {item.position_prev, item.position}, thickness, color);
+				}
 			}
 		}
 	}
@@ -136,6 +137,7 @@ render_game :: proc(game_state: ^Game_State) {
 				timer.t = 0
 			}
 
+			log_timer(&debug_text_pos, &game_state.perf.graphics)
 			log_timer(&debug_text_pos, &game_state.perf.input)
 			log_timer(&debug_text_pos, &game_state.perf.physics_integration)
 			log_timer(&debug_text_pos, &game_state.perf.physics_bullet_line_queries)
@@ -157,4 +159,5 @@ render_game :: proc(game_state: ^Game_State) {
 			}
 		}
 	}
+	game_state.perf.graphics.t += update_timer(&t)
 }

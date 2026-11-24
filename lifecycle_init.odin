@@ -2,7 +2,6 @@ package main
 
 import "core:math"
 import "core:math/linalg"
-import "core:math/rand"
 import "core:mem"
 
 import pq "core:container/priority_queue"
@@ -74,6 +73,7 @@ EnemyTarget :: struct {
 }
 
 Perf :: struct {
+	graphics:                    NamedTimer,
 	input:                       NamedTimer,
 	physics:                     NamedTimer,
 	physics_integration:         NamedTimer,
@@ -100,7 +100,6 @@ Entity :: struct {
 	added_before_this_frame: bool,
 	position, position_prev: Vec2,
 	velocity:   Vec2,
-	color:      Color,
 	size:       f32,
 	health:     f32,
 
@@ -116,20 +115,20 @@ Entity :: struct {
 
 	distance_to_base: f32,
 	
-	// spacial_grid: map[Vec2i]^Collision,
-	// collisions: [  c]Collision,
+	color:      Color,
 }
 
 EntitySoaPtr :: #soa^#soa[]Entity
 
 init :: proc(state: ^Game_State) {
 	megabytes := size_of(Game_State) / mem.Megabyte
-	log("\n================ Memory usage: ", megabytes, "mb ================ ")
+	log("\n================ Memory usage (not including raylib): ", megabytes, "mb ================ ")
 
 	state.view = {
 		size = 1000,
 	}
 
+	state.perf.graphics.name                    = "graphics";
 	state.perf.input.name                       = "input";
 	state.perf.physics.name                     = "physics";
 	state.perf.physics_integration.name         = "physics_integration";
@@ -179,14 +178,14 @@ init :: proc(state: ^Game_State) {
 	}
 
 
-	n := IS_TEST_SCENARIO ? 100 : 10_000 // 100_000 
+	n := IS_TEST_SCENARIO ? 100 : 100_000 
 	for i in 0..<n {
-		angle := rand.float32_range(-math.PI, math.PI)
+		angle := random_range(-math.PI, math.PI)
 		pos := 1000 * Vec2{math.cos(angle), math.sin(angle)}
 		e := pool_add(&state.enemies, {
 			size          = 10,
 			health        = 100,
-			move_speed    = 30 * rand.float32_range(1, 2),
+			move_speed    = 30 * random_range(1, 2),
 			color         = {255, 0, 0, 255},
 		})
 		set_entity_position(state, &state.enemies, e, pos)
@@ -194,8 +193,8 @@ init :: proc(state: ^Game_State) {
 
 	cg: Circle_Generator
 	for pos in circle_generate(&cg, IS_TEST_SCENARIO ? 1 : 100) {
-		t := add_tower(state, pos * rand.float32_range(50, 100))
-		state.towers.items[t].shoot_cooldown_timer = rand.float32_range(0, state.towers.items[t].shoot_cooldown);
+		t := add_tower(state, pos * random_range(50, 100))
+		state.towers.items[t].shoot_cooldown_timer = random_range(0, state.towers.items[t].shoot_cooldown)
 	}
 }
 
@@ -219,7 +218,7 @@ add_tower :: proc(state: ^Game_State, position: Vec2) -> int {
 		health               = 100,
 		size                 = 10,
 		shoot_cooldown       = cooldown,
-		shoot_cooldown_timer = rand.float32_range(0, cooldown),
+		shoot_cooldown_timer = random_range(0, cooldown),
 	})
 	set_entity_position(state, &state.towers, t, position)
 	return t

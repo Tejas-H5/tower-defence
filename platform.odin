@@ -14,6 +14,7 @@ log :: proc(args: ..any, loc := #caller_location) {
 }
 
 Color :: rl.Color
+Color2 :: [4]f32
 Vec2 :: [2]f32
 Vec2i :: [2]i32
 Rect :: struct {

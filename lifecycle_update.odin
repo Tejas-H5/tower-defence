@@ -2,7 +2,6 @@ package main
 
 import "core:math"
 import "core:math/linalg"
-import "core:math/rand"
 import pq "core:container/priority_queue"
 
 update_game :: proc(game_state: ^Game_State, dt: f32) {
@@ -139,8 +138,7 @@ update_game :: proc(game_state: ^Game_State, dt: f32) {
 					target       := targets_queue[tower_idx % len(targets_queue)]
 					target_enemy := &game_state.enemies.items[target.idx]
 
-					BULLET_SPEED :: 10_000
-					velocity := BULLET_SPEED * linalg.normalize0(target_enemy.position - tower.position)
+					velocity := random_range(8_00, 10_00) * linalg.normalize0(target_enemy.position - tower.position)
 					add_bullet(game_state, tower.position, velocity)
 				}
 			}
